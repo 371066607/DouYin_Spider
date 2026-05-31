@@ -302,6 +302,14 @@ class AgentDesktopApp(ctk.CTk):
         )
         self._update_btn.grid(row=len(self.NAV_ITEMS) + 4, column=0, sticky="ew", padx=10, pady=(2, 4))
 
+        ctk.CTkLabel(
+            nav,
+            text=f"版本 {self._version_str()}",
+            text_color="#8A7766",
+            font=ctk.CTkFont(size=10),
+            anchor="w",
+        ).grid(row=len(self.NAV_ITEMS) + 5, column=0, sticky="ew", padx=24, pady=(0, 10))
+
         shell = ctk.CTkFrame(self, fg_color="transparent")
         shell.grid(row=0, column=1, sticky="nsew", padx=22, pady=18)
         shell.grid_rowconfigure(0, weight=1)
@@ -2114,6 +2122,21 @@ class AgentDesktopApp(ctk.CTk):
             pass
         return max(bundled, override)
 
+    @staticmethod
+    def _ver_to_date(ver: int) -> str:
+        """把代码版本号（commit 时间戳）转成可读日期，用于显示/区分版本。"""
+        if not ver:
+            return ""
+        try:
+            import datetime as _dt
+            return _dt.datetime.fromtimestamp(int(ver)).strftime("%Y.%m.%d.%H%M")
+        except Exception:
+            return str(ver)
+
+    def _version_str(self) -> str:
+        ver = self._effective_code_ver()
+        return self._ver_to_date(ver) if ver else "开发版"
+
     def _show_update_result(self, r: dict) -> None:
         if r.get("mode") == "git":
             if r.get("up_to_date"):
@@ -2136,19 +2159,21 @@ class AgentDesktopApp(ctk.CTk):
                     "https://github.com/371066607/DouYin_Spider/releases",
                 )
                 return
+            cur = self._ver_to_date(r.get("local"))
+            new = self._ver_to_date(r.get("latest"))
             if r.get("up_to_date"):
-                messagebox.showinfo("检查更新", "✅ 已是最新版本。")
+                messagebox.showinfo("检查更新", f"✅ 已是最新版本（{cur}）。")
                 return
             if r.get("can_patch"):
                 if messagebox.askyesno(
                     "发现新版本",
-                    f"有可更新的内容（{r.get('date')}）。\n\n"
+                    f"当前版本：{cur}\n最新版本：{new}（{r.get('date')}）\n\n"
                     "是否现在一键更新？\n"
                     "只下载几 MB 的代码补丁，完成后自动重启，登录态与数据都保留。",
                 ):
                     self._download_code_patch()
             else:
-                messagebox.showinfo("检查更新", "✅ 已是最新版本。")
+                messagebox.showinfo("检查更新", f"✅ 已是最新版本（{cur}）。")
 
     def _do_git_pull(self) -> None:
         self._status_var.set("正在更新（git pull）……")

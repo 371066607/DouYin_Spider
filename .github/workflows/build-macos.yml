@@ -90,8 +90,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="GitHub 自动构建的 macOS 版（Apple Silicon），通过冒烟自检。首次打开若提示「无法验证开发者」，右键 App 选「打开」，或终端执行 xattr -cr liangbashuazi.app。构建号 ${GITHUB_RUN_NUMBER}。"
-          gh release create macos liangbashuazi-macos.zip --title "两把刷子获客 · macOS" --notes "$notes" 2>/dev/null || true
+          d=$(git show -s --date=format:'%Y.%m.%d.%H%M' --format=%cd HEAD)
+          title="两把刷子获客 · macOS · v$d"
+          notes="版本 v$d（构建号 ${GITHUB_RUN_NUMBER}）。macOS 版（Apple Silicon），通过冒烟自检。首次打开若提示「无法验证开发者」，右键 App 选「打开」或终端执行 xattr -cr liangbashuazi.app。"
+          gh release create macos liangbashuazi-macos.zip --title "$title" --notes "$notes" 2>/dev/null || true
           gh release upload macos liangbashuazi-macos.zip --clobber
-          gh release edit macos --title "两把刷子获客 · macOS" --notes "$notes"
+          gh release edit macos --title "$title" --notes "$notes"
           echo "永久下载链接：https://github.com/${GITHUB_REPOSITORY}/releases/download/macos/liangbashuazi-macos.zip"

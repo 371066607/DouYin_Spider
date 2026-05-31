@@ -28,7 +28,9 @@ jobs:
           find "$stage" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
           (cd "$stage" && zip -rq ../app-code.zip .)
           echo "补丁大小: $(stat -c%s app-code.zip) 字节, codever=$ver"
-          notes="代码补丁(跨平台通用) codever:$ver。客户端「检查更新」会自动下载此补丁热更新(几MB)，无需重下整包。"
-          gh release create code app-code.zip --title "代码补丁" --notes "$notes" 2>/dev/null || true
+          d=$(git show -s --date=format:'%Y.%m.%d.%H%M' --format=%cd HEAD)
+          title="代码补丁 · v$d"
+          notes="代码补丁(跨平台通用) codever:$ver（v$d）。客户端「检查更新」会自动下载此补丁热更新(几MB)，无需重下整包。"
+          gh release create code app-code.zip --title "$title" --notes "$notes" 2>/dev/null || true
           gh release upload code app-code.zip --clobber
-          gh release edit code --title "代码补丁" --notes "$notes"
+          gh release edit code --title "$title" --notes "$notes"
