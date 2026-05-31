@@ -119,13 +119,22 @@ def _setup_frozen_runtime():
         os.environ["PATH"] = node_dir + os.pathsep + os.environ.get("PATH", "")
     except Exception:
         pass
-    # 2) chromium 放用户可写目录（首次运行下载到这）
-    browsers = _frozen_browsers_dir()
-    try:
-        os.makedirs(browsers, exist_ok=True)
-    except Exception:
-        pass
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers  # 打包版强制用用户目录（首次下载到这）
+    # 2) chromium：优先用「打包进发行包」的内核（用户免下载）；没有才回退用户目录（首次下载）
+    bundled = None
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        cand = os.path.join(meipass, "ms-playwright")
+        if os.path.isdir(cand):
+            bundled = cand
+    if bundled:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = bundled
+    else:
+        browsers = _frozen_browsers_dir()
+        try:
+            os.makedirs(browsers, exist_ok=True)
+        except Exception:
+            pass
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers
 
 
 def ensure_chromium(on_progress=None):

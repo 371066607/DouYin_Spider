@@ -1920,7 +1920,21 @@ def _run_selfcheck() -> None:
         )
         ok = bool(ab and len(ab) > 100)
         result["steps"]["a_bogus"] = f"ok len={len(ab)}" if ok else f"BAD {ab!r}"
-        result["ok"] = ok
+
+        # 验证打包进去的 chromium 能被 playwright 找到（不触发下载）
+        chromium_ok = False
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                exe = p.chromium.executable_path
+            chromium_ok = bool(exe and os.path.exists(exe))
+            result["steps"]["chromium"] = "ok（已打包）" if chromium_ok else f"未找到: {exe}"
+        except Exception as exc:
+            result["steps"]["chromium"] = f"err: {type(exc).__name__}: {exc}"
+
+        # 打包版(frozen)必须自带 chromium；开发环境则不强制
+        require_chromium = bool(getattr(sys, "frozen", False))
+        result["ok"] = ok and (chromium_ok or not require_chromium)
     except Exception as exc:
         result["steps"]["error"] = f"{type(exc).__name__}: {exc}"
         result["traceback"] = traceback.format_exc()
