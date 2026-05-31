@@ -87,11 +87,12 @@ if (-not (Test-Path $venvPython)) {
     Write-Host "[3/4] Python 环境已就绪，跳过。" -ForegroundColor Green
 }
 
-# ---- 4) Node 签名依赖（跳过可选的 canvas：签名用不到，且新版 Node 无 VS 工具链会编译失败）----
+# ---- 4) Node 签名依赖（--ignore-scripts 跳过 canvas 原生编译：签名用不到 canvas，
+#         jsdom 会回退成 null；新版 Node 无 VS 工具链编译 canvas 会让 npm 崩溃）----
 if (-not (Test-Path "node_modules\jsdom")) {
     Write-Host "[4/4] 安装 Node 签名依赖（npm install，首次较慢）..." -ForegroundColor Cyan
     if (Test-Path "node_modules") { Remove-Item -Recurse -Force "node_modules" }
-    npm install --omit=optional
+    npm install --ignore-scripts
 } else {
     Write-Host "[4/4] 签名依赖已就绪，跳过。" -ForegroundColor Green
 }

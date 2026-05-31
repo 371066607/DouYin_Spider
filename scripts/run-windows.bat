@@ -31,13 +31,14 @@ goto :node_deps
 call ".venv\Scripts\activate.bat"
 
 :node_deps
-REM ---- 2) Node signing deps. Skip optional deps (canvas) — not needed for
-REM signing and it fails to compile on newer Node without VS build tools. ----
+REM ---- 2) Node signing deps. Use --ignore-scripts so the native "canvas"
+REM build never runs: signing doesn't need canvas (jsdom falls back to null),
+REM and compiling it on newer Node without VS build tools crashes npm. ----
 if exist "node_modules\jsdom" goto :launch
 echo [2/3] Installing Node signing deps (npm install, slow on first run)...
 if exist node_modules rmdir /s /q node_modules
 REM npm is npm.cmd on Windows; MUST use "call" or control never returns here.
-call npm install --omit=optional
+call npm install --ignore-scripts
 if errorlevel 1 goto :npm_failed
 
 :launch
