@@ -2157,8 +2157,9 @@ def _run_selfcheck() -> None:
     try:
         from desktop.bootstrap import build_services
         result["steps"]["import_bootstrap"] = "ok"
-        build_services()  # 触发 _setup_frozen_runtime（接上 node 路径）
+        _svc = build_services()  # 触发 _setup_frozen_runtime（接上 node 路径）
         result["steps"]["build_services"] = "ok"
+        result["steps"]["db_path"] = str(getattr(_svc.config, "db_path", ""))
         from utils.dy_util import generate_a_bogus
         ab = generate_a_bogus(
             "device_platform=webapp&aid=6383&channel=channel_pc_web", ""

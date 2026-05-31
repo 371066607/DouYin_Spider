@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import os
 import sys
+from pathlib import Path
 
 from web.config import WebConfig
 from web.db import connect_db, init_db
@@ -45,7 +46,18 @@ class DesktopServices:
 
 
 def build_services(overrides=None):
-    overrides = overrides or {}
+    overrides = dict(overrides or {})
+    # 打包版：cookie/数据库/导出统一放用户数据目录（app 文件夹之外），
+    # 这样以后更新只覆盖 app 文件夹，登录态和数据都不会丢。
+    if getattr(sys, "frozen", False):
+        data_dir = _user_data_dir()
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+        except Exception:
+            pass
+        overrides.setdefault("DB_PATH", os.path.join(data_dir, "web-ui.sqlite3"))
+        overrides.setdefault("MEDIA_DIR", os.path.join(data_dir, "media_datas"))
+        overrides.setdefault("EXCEL_DIR", os.path.join(data_dir, "excel_datas"))
     config = WebConfig(overrides)
     _configure_proxy_behavior(config)
     _configure_playwright_behavior(config)
@@ -61,9 +73,14 @@ def build_services(overrides=None):
     im = IMService(config.db_path, session, task_manager, broker)
     login = LoginService(config.db_path, task_manager, broker)
     scoring = LeadScoringService()
+    runtime_dir = (
+        Path(_user_data_dir()) / "runtime"
+        if getattr(sys, "frozen", False)
+        else config.project_root / "datas" / "runtime"
+    )
     agent = AgentAcquisitionService(
         config.db_path,
-        config.project_root / "datas" / "runtime",
+        runtime_dir,
         task_manager,
         crawl,
         scoring,
@@ -100,14 +117,19 @@ def _configure_playwright_behavior(config: WebConfig):
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(local_browser_dir)
 
 
-def _frozen_browsers_dir():
+def _user_data_dir():
+    """app 文件夹之外的用户数据目录：放 cookie/数据库/导出等，更新覆盖 app 文件夹也不丢。"""
     if sys.platform == "darwin":
         base = os.path.expanduser("~/Library/Application Support/liangbashuazi")
     elif sys.platform == "win32":
         base = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "liangbashuazi")
     else:
         base = os.path.expanduser("~/.liangbashuazi")
-    return os.path.join(base, "ms-playwright")
+    return base
+
+
+def _frozen_browsers_dir():
+    return os.path.join(_user_data_dir(), "ms-playwright")
 
 
 def _setup_frozen_runtime():
