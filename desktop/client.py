@@ -9,6 +9,22 @@ from queue import Empty, SimpleQueue
 import sys
 from typing import Any, Callable, Iterable
 
+# PyInstaller --windowed（无控制台）下 sys.stdout / sys.stderr 为 None，
+# 任何模块在导入时 print() / 写日志都会触发 'NoneType' has no attribute 'write' 崩溃。
+# 在最早阶段把它们重定向到用户目录日志文件：既避免崩溃，又能留存报错供排查。
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _log_fp = open(
+            os.path.join(os.path.expanduser("~"), "liangbashuazi.log"),
+            "a", encoding="utf-8", buffering=1,
+        )
+    except Exception:
+        _log_fp = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = _log_fp
+    if sys.stderr is None:
+        sys.stderr = _log_fp
+
 _CTK_IMPORT_ERROR: BaseException | None = None
 try:
     import customtkinter as ctk
