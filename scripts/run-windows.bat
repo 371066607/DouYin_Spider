@@ -31,12 +31,13 @@ goto :node_deps
 call ".venv\Scripts\activate.bat"
 
 :node_deps
-REM ---- 2) Native node_modules (Douyin signing, must build on this platform) ----
-if exist "node_modules\canvas\build" goto :launch
+REM ---- 2) Node signing deps. Skip optional deps (canvas) — not needed for
+REM signing and it fails to compile on newer Node without VS build tools. ----
+if exist "node_modules\jsdom" goto :launch
 echo [2/3] Installing Node signing deps (npm install, slow on first run)...
 if exist node_modules rmdir /s /q node_modules
 REM npm is npm.cmd on Windows; MUST use "call" or control never returns here.
-call npm install
+call npm install --omit=optional
 if errorlevel 1 goto :npm_failed
 
 :launch
