@@ -1,0 +1,34 @@
+name: publish-code-patch
+
+# 只发「代码补丁」（几百 KB），供客户端热更新。改了 Python 代码后跑这个即可，
+# 无需重新构建 360MB 整包（整包只在依赖/chromium/launcher 变更时才需要重打）。
+on:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成代码补丁并发布到 Releases（tag=code）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(git show -s --format=%ct HEAD)
+          printf '%s' "$ver" > code_version.txt
+          stage=app-code-stage
+          rm -rf "$stage"; mkdir -p "$stage/static"
+          for d in desktop web dy_apis dy_live utils builder; do cp -R "$d" "$stage/$d"; done
+          cp static/*.py "$stage/static/" 2>/dev/null || true
+          cp main.py "$stage/"
+          cp code_version.txt "$stage/"
+          find "$stage" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+          (cd "$stage" && zip -rq ../app-code.zip .)
+          echo "补丁大小: $(stat -c%s app-code.zip) 字节, codever=$ver"
+          notes="代码补丁(跨平台通用) codever:$ver。客户端「检查更新」会自动下载此补丁热更新(几MB)，无需重下整包。"
+          gh release create code app-code.zip --title "代码补丁" --notes "$notes" 2>/dev/null || true
+          gh release upload code app-code.zip --clobber
+          gh release edit code --title "代码补丁" --notes "$notes"
