@@ -169,7 +169,7 @@ class AgentAcquisitionService:
                 rounds = 0
                 while not stop_event.is_set():
                     rounds += 1
-                    result = self.collect_comment_cycle()
+                    result = self.collect_comment_cycle(should_stop=stop_event.is_set)
                     inserted = int(result["inserted_count"])
                     total_inserted += inserted
                     interval = max(self._int_value(self.get_comment_config().get("interval_minutes"), 1), 1) * 60
@@ -199,7 +199,7 @@ class AgentAcquisitionService:
             event.set()
         return {"message": "评论监控已停止"}
 
-    def collect_comment_cycle(self):
+    def collect_comment_cycle(self, should_stop=None):
         config = self.get_comment_config()
         aweme_ids = self._split_lines(config.get("video_ids"))
         include_terms = self._split_terms(config.get("include_keywords"))
@@ -209,7 +209,9 @@ class AgentAcquisitionService:
         inserted = 0
         scanned = 0
         for aweme_id in aweme_ids:
-            comments = self._fetch_comment_pages(aweme_id, page_count)
+            if should_stop and should_stop():  # 点了停止就立即收尾，不再继续签名
+                break
+            comments = self._fetch_comment_pages(aweme_id, page_count, should_stop=should_stop)
             for comment in comments:
                 scanned += 1
                 if not self._comment_in_time_range(comment, cutoff, config):
@@ -748,12 +750,14 @@ class AgentAcquisitionService:
             conn.commit()
         return max(cursor.rowcount, 0)
 
-    def _fetch_comment_pages(self, aweme_id, page_count):
+    def _fetch_comment_pages(self, aweme_id, page_count, should_stop=None):
         cursor = "0"
         pages = 0
         comments = []
         limit = page_count if page_count > 0 else 999999
         while pages < limit:
+            if should_stop and should_stop():  # 翻页间检查停止，秒停不再签名
+                break
             payload = self.crawl_service.invoke(
                 "get_work_out_comment",
                 {"work_url": self._work_url(aweme_id), "cursor": cursor},

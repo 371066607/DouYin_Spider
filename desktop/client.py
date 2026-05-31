@@ -385,6 +385,14 @@ class AgentDesktopApp(ctk.CTk):
         right = self._panel(main, "监控配置", row=0, column=1, width=380)
 
         toolbar = self._toolbar(left)
+        # 评级过滤：只过滤「列表显示」，不影响后台监控/入库
+        self._comment_grade_var = ctk.StringVar(value="全部评级")
+        ctk.CTkOptionMenu(
+            toolbar, variable=self._comment_grade_var,
+            values=["全部评级", "S+A 高意向", "S", "A", "B", "C"],
+            width=108, height=28, font=ctk.CTkFont(size=11),
+            command=lambda _v: self._refresh_comments(),
+        ).pack(side="left", padx=(0, 8))
         self._button(toolbar, "开始监控", lambda: self._run_agent_action("queue_comment_monitor", before=self._comment_config_values))
         self._button(toolbar, "停止监控", lambda: self._run_agent_action("stop_comment_monitor"))
         self._button(toolbar, "清空", lambda: self._confirm_action("清空评论监控结果？", "clear_comments", refresh=self._refresh_comments))
@@ -1054,13 +1062,43 @@ class AgentDesktopApp(ctk.CTk):
     def _on_close(self) -> None:
         self._save_geometry()
         self._closing = True
+        # 停掉所有后台监控/接收/守护，避免关窗后还在签名（弹黑框）+ 进程残留
+        try:
+            tm = getattr(self.services, "task_manager", None)
+            if tm is not None:
+                for runtime in list(tm.runtimes.values()):
+                    if hasattr(runtime, "set"):  # threading.Event
+                        try:
+                            runtime.set()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        for attr in ("_send_daemon_stop",):
+            ev = getattr(self, attr, None)
+            if ev is not None and hasattr(ev, "set"):
+                try:
+                    ev.set()
+                except Exception:
+                    pass
+        try:
+            im = getattr(self.services, "im", None)
+            if im is not None and im.receiver_running():
+                im.stop_receiver()
+        except Exception:
+            pass
         if self._poll_job is not None:
             try:
                 self.after_cancel(self._poll_job)
             except Exception:
                 pass
             self._poll_job = None
-        self.destroy()
+        try:
+            self.destroy()
+        finally:
+            # ThreadPoolExecutor 的线程是非守护线程，destroy() 后进程仍会驻留；
+            # 强制结束整个进程，确保任务管理器里不残留。
+            os._exit(0)
 
     def _refresh_video(self) -> None:
         rows = self._safe_call("list_videos", fallback=[])
@@ -1099,16 +1137,25 @@ class AgentDesktopApp(ctk.CTk):
         return widget.get()
 
     def _comment_visible_rows(self, rows: list) -> list:
-        """按评论面板上当前的 包含/排除 关键词即时过滤（不依赖是否已保存）。"""
+        """按当前 包含/排除 关键词 + 评级 即时过滤显示（只过滤列表，不影响监控/入库）。"""
         fields = getattr(self, "comment_fields", None)
-        if not fields:
-            return rows
-        include = self._split_terms(self._read_widget(fields.get("include_keywords")))
-        exclude = self._split_terms(self._read_widget(fields.get("exclude_keywords")))
-        if not include and not exclude:
+        include = self._split_terms(self._read_widget(fields.get("include_keywords"))) if fields else []
+        exclude = self._split_terms(self._read_widget(fields.get("exclude_keywords"))) if fields else []
+
+        grade_var = getattr(self, "_comment_grade_var", None)
+        grade_sel = grade_var.get() if grade_var else "全部评级"
+        grade_allow: set | None = None
+        if grade_sel in ("S", "A", "B", "C"):
+            grade_allow = {grade_sel}
+        elif grade_sel.startswith("S+A"):
+            grade_allow = {"S", "A"}
+
+        if not include and not exclude and grade_allow is None:
             return rows
         result = []
         for row in rows:
+            if grade_allow is not None and str(row.get("grade") or "").strip().upper() not in grade_allow:
+                continue
             text = str(row.get("comment_text") or "")
             if include and not any(term in text for term in include):
                 continue
