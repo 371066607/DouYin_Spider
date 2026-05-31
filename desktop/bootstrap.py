@@ -143,14 +143,32 @@ def ensure_chromium():
         import subprocess
         from playwright._impl._driver import compute_driver_executable, get_driver_env
         drv = compute_driver_executable()
-        env = get_driver_env()
+        base_env = get_driver_env()
         if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
-            env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ["PLAYWRIGHT_BROWSERS_PATH"]
-        result = subprocess.run(
-            [*drv, "install", "chromium"], env=env, capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            return True, "浏览器下载完成"
-        return False, (result.stderr or result.stdout or "")[-300:]
+            base_env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ["PLAYWRIGHT_BROWSERS_PATH"]
+
+        # 下载源：用户若自定义了 PLAYWRIGHT_DOWNLOAD_HOST 则只用它；
+        # 否则「国内镜像优先 → 官方 CDN 兜底」（官方 CDN 在国内常下到一半失败）。
+        user_host = os.environ.get("PLAYWRIGHT_DOWNLOAD_HOST")
+        if user_host:
+            hosts = [user_host]
+        else:
+            hosts = ["https://cdn.npmmirror.com/binaries/playwright", ""]
+
+        last = ""
+        for host in hosts:
+            env = dict(base_env)
+            if host:
+                env["PLAYWRIGHT_DOWNLOAD_HOST"] = host
+            else:
+                env.pop("PLAYWRIGHT_DOWNLOAD_HOST", None)
+            for _ in range(2):  # 每个源重试一次，扛偶发网络中断
+                result = subprocess.run(
+                    [*drv, "install", "chromium"], env=env, capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    return True, "浏览器下载完成"
+                last = (result.stderr or result.stdout or "")[-300:]
+        return False, last
     except Exception as exc:
         return False, str(exc)
