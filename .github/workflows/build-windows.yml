@@ -111,3 +111,31 @@ jobs:
           gh release edit windows --title "两把刷子获客 · Windows" --notes "$notes"
           Write-Host "永久下载链接："
           Write-Host "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/windows/liangbashuazi-windows.zip"
+
+      - name: 打包代码补丁 app-code.zip（跨平台通用，供热更新）
+        shell: pwsh
+        run: |
+          $stage = "app-code-stage"
+          if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          foreach ($d in "desktop","web","dy_apis","dy_live","utils","builder") {
+            Copy-Item -Recurse -Force $d "$stage/$d"
+          }
+          New-Item -ItemType Directory -Force "$stage/static" | Out-Null
+          Get-ChildItem static -Filter *.py | Copy-Item -Destination "$stage/static/"
+          Copy-Item main.py "$stage/"
+          Copy-Item code_version.txt "$stage/"
+          Get-ChildItem $stage -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath app-code.zip -Force
+          Write-Host ("补丁大小(字节): " + (Get-Item app-code.zip).Length)
+
+      - name: 发布代码补丁到 Releases（tag=code，跨平台通用）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ver = (Get-Content code_version.txt).Trim()
+          $notes = "代码补丁(跨平台通用) codever:$ver。客户端「检查更新」会自动下载此补丁热更新(几MB)，无需重下整包。"
+          gh release create code app-code.zip --title "代码补丁" --notes "$notes" 2>$null
+          gh release upload code app-code.zip --clobber
+          gh release edit code --title "代码补丁" --notes "$notes"

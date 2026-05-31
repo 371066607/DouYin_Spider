@@ -38,21 +38,23 @@ jobs:
           npm --version
           npm install --ignore-scripts
 
-      - name: 写入构建版本号（用于检查更新比对）
+      - name: 写入代码版本号（commit 时间戳，跨平台一致，用于补丁热更新比对）
         run: |
-          printf "SHA = '%s'\nRUN = '%s'\n" "${{ github.sha }}" "${{ github.run_number }}" > desktop/_build_info.py
-          cat desktop/_build_info.py
+          git show -s --format=%ct HEAD | tr -d '\n' > code_version.txt
+          echo "code_version=$(cat code_version.txt)"
 
-      - name: PyInstaller 打包（生成 .app）
+      - name: PyInstaller 打包（入口=瘦启动器 launcher.py，生成 .app）
         run: >
           pyinstaller --noconfirm --clean --windowed
           --name liangbashuazi
           --paths .
           --collect-submodules desktop --collect-submodules web
           --collect-submodules dy_apis --collect-submodules dy_live
+          --collect-submodules utils --collect-submodules builder
           --collect-all customtkinter --collect-all playwright
           --add-data "desktop/claude_theme.json:desktop"
-          desktop/client.py
+          --add-data "code_version.txt:."
+          launcher.py
 
       - name: 后处理：拷 static + node_modules + chromium 进 .app
         run: |
