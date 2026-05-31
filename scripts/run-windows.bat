@@ -35,7 +35,8 @@ REM ---- 2) Native node_modules (Douyin signing, must build on this platform) --
 if exist "node_modules\canvas\build" goto :launch
 echo [2/3] Installing Node signing deps (npm install, slow on first run)...
 if exist node_modules rmdir /s /q node_modules
-npm install
+REM npm is npm.cmd on Windows; MUST use "call" or control never returns here.
+call npm install
 if errorlevel 1 goto :npm_failed
 
 :launch
