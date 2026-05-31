@@ -238,6 +238,11 @@ class LoginService:
         sent_today = self._today_sent_count()
         consecutive_fail = 0
         aborted = None
+        limited = False
+        # 已达每日上限：直接返回，不要白开一次浏览器（守护会反复调用本方法）
+        if daily_limit > 0 and sent_today >= daily_limit:
+            return {"sent": 0, "failed": 0, "total": total, "results": [],
+                    "aborted": None, "limited": True}
         with sync_playwright() as p:
             browser, context = self._new_browser_context(p, headless, cookies)
             try:
@@ -246,6 +251,7 @@ class LoginService:
                     if should_stop and should_stop():
                         break
                     if daily_limit > 0 and sent_today >= daily_limit:
+                        limited = True
                         if self.broker:
                             self.broker.publish("events", {"channel": "dm", "message": f"已达每日上限 {daily_limit} 条，停止发送"})
                         break
@@ -290,7 +296,8 @@ class LoginService:
                             wait = random.uniform(max(interval_seconds, 1), max(interval_seconds, 1) * 2)
                             if self._interruptible_wait(page, wait, should_stop):
                                 break
-                return {"sent": sent, "failed": failed, "total": total, "results": results, "aborted": aborted}
+                return {"sent": sent, "failed": failed, "total": total, "results": results,
+                        "aborted": aborted, "limited": limited}
             finally:
                 browser.close()
 
@@ -312,14 +319,19 @@ class LoginService:
             pass
 
     def _today_sent_count(self):
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
         from web.db import connect_db
-        today = datetime.now(timezone.utc).date().isoformat()
+        # sent_at 以 UTC 存储，但「今天」要按用户本地时区算（否则国内用户在早上 8 点重置）
+        now_local = datetime.now().astimezone()
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_utc = start_local.astimezone(timezone.utc).isoformat()
+        end_utc = (start_local + timedelta(days=1)).astimezone(timezone.utc).isoformat()
         try:
             with connect_db(self.db_path) as conn:
                 row = conn.execute(
-                    "select count(*) c from agent_private_targets where status='sent' and sent_at like ?",
-                    (today + "%",),
+                    "select count(*) c from agent_private_targets "
+                    "where status='sent' and sent_at >= ? and sent_at < ?",
+                    (start_utc, end_utc),
                 ).fetchone()
             return int(row["c"] or 0)
         except Exception:

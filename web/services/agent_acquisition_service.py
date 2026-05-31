@@ -885,7 +885,9 @@ class AgentAcquisitionService:
         date_from = str(config.get("date_from") or "").strip()
         date_to = str(config.get("date_to") or "").strip()
         if date_from and date_to:
-            return date_from <= created_at.date().isoformat() <= date_to
+            # 用本地日期比较，跟列表展示的时间（_time_label 用本地时区）保持一致
+            local_date = created_at.astimezone().date().isoformat()
+            return date_from <= local_date <= date_to
         return created_at >= cutoff if cutoff else True
 
     def _decorate_video(self, row):

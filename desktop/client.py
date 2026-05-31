@@ -1099,7 +1099,9 @@ class AgentDesktopApp(ctk.CTk):
         batch_pause = _as_int("batch_pause_minutes", 10)
         daily_limit = _as_int("daily_limit", 0)
         active_hours = vals.get("active_hours", "")
-        if not self._in_active_hours(active_hours):
+        if self._active_hours_invalid(active_hours):
+            messagebox.showwarning("活跃时段格式有误", f"「活跃时段」填的是「{active_hours}」，无法识别，已按「不限」处理。\n正确格式：如 9-22 或 9:00-22:00；留空=不限。")
+        elif not self._in_active_hours(active_hours):
             messagebox.showinfo("自动发送", f"当前不在活跃时段（{active_hours}），未发送。\n可改「活跃时段」或留空表示不限。")
             return
         headless = vals.get("headless_mode") == "on"
@@ -1211,13 +1213,16 @@ class AgentDesktopApp(ctk.CTk):
             except Exception:
                 return default
 
+        active_hours = vals.get("active_hours", "")
+        if self._active_hours_invalid(active_hours):
+            messagebox.showwarning("活跃时段格式有误", f"「活跃时段」填的是「{active_hours}」，无法识别，守护将按「不限」全天发送。\n正确格式：如 9-22 或 9:00-22:00；留空=不限。")
         cfg = {
             "message": message,
             "interval": max(_as_int("send_interval_seconds", 15), 1),
             "batch_size": _as_int("batch_size", 5),
             "batch_pause": _as_int("batch_pause_minutes", 10),
             "daily_limit": _as_int("daily_limit", 0),
-            "active_hours": vals.get("active_hours", ""),
+            "active_hours": active_hours,
             "headless": vals.get("headless_mode") == "on",
         }
         self._send_daemon_stop = threading.Event()
@@ -1262,25 +1267,53 @@ class AgentDesktopApp(ctk.CTk):
                         stop.set()
                         self.after(0, lambda a=result.get("aborted"): self._daemon_aborted(a))
                         return
+                    if isinstance(result, dict) and result.get("limited"):
+                        # 今日已达上限：退避 30 分钟，别再每 30 秒空跑
+                        self.after(0, lambda: self._log_private("📵 今日已达发送上限，守护暂停，30 分钟后再看…"))
+                        if stop.wait(1800):
+                            break
+                        continue
                 except Exception as exc:
                     self.after(0, lambda e=exc: self._log_private(f"守护发送异常：{type(e).__name__}: {e}"))
             if stop.wait(30):  # 每 30 秒扫一次名单
                 break
 
+    @staticmethod
+    def _parse_hm(token: str):
+        """把 '9' / '9:00' / '09：30' 解析成「当天的分钟数」；无法解析返回 None。"""
+        token = (token or "").strip().replace("：", ":")
+        if not token:
+            return None
+        try:
+            if ":" in token:
+                h, m = token.split(":", 1)
+                return int(h) * 60 + int(m or 0)
+            return int(token) * 60
+        except (TypeError, ValueError):
+            return None
+
+    def _active_hours_invalid(self, spec: str) -> bool:
+        """非空、带 '-' 却解析不出来 → 视为无效输入（需要提示用户）。"""
+        spec = (spec or "").strip()
+        if not spec or "-" not in spec:
+            return False
+        a, b = spec.split("-", 1)
+        return self._parse_hm(a) is None or self._parse_hm(b) is None
+
     def _in_active_hours(self, spec: str) -> bool:
         spec = (spec or "").strip()
         if not spec or "-" not in spec:
             return True  # 不限
-        try:
-            import datetime
-            a, b = spec.split("-", 1)
-            start, end = int(a), int(b)
-            hour = datetime.datetime.now().hour
-            if start <= end:
-                return start <= hour < end
-            return hour >= start or hour < end  # 跨夜，如 22-6
-        except Exception:
-            return True
+        import datetime
+        a, b = spec.split("-", 1)
+        start, end = self._parse_hm(a), self._parse_hm(b)
+        if start is None or end is None:
+            return True  # 解析失败：当作不限（启动时已单独提示用户）
+        now = datetime.datetime.now()
+        cur = now.hour * 60 + now.minute
+        if start <= end:
+            return start <= cur < end
+        return cur >= start or cur < end  # 跨夜，如 22-6
 
     def _daemon_round_logged(self, result: Any) -> None:
         if isinstance(result, dict):
