@@ -526,29 +526,23 @@ class LoginService:
                         False,
                         "已打开搜索页和直播页。请完成需要的验证后，回到后台点击“我已完成验证并保存 Cookie”。",
                     )
-                    while time.time() < deadline:
-                        self._wait_for_browser_confirmation(session_id, deadline)
-                        cookie_bundle = self._build_cookie_bundle(context.cookies())
-                        try:
-                            self._validate_search_cookie(cookie_bundle["douyin"])
-                            return cookie_bundle
-                        except VerificationRequiredError:
-                            self._set_browser_login_state(
-                                session_id,
-                                "verification_required",
-                                False,
-                                "当前 Cookie 仍需抖音搜索验证。请留在浏览器搜索页完成验证后，再点击“我已完成验证并保存 Cookie”。",
-                                confirm_requested=False,
-                            )
-                            self._refresh_search_page(search_page)
-                            self._set_browser_login_state(
-                                session_id,
-                                "awaiting_confirm",
-                                False,
-                                "搜索页已重新激活。请在浏览器完成验证后，再回到后台点击“我已完成验证并保存 Cookie”。",
-                                confirm_requested=False,
-                            )
-                    raise TimeoutError("等待你确认保存 Cookie 超时")
+                    # 等用户点一次「我已完成」就保存——不再被搜索验证卡死。
+                    # 搜索接口的 verify_check 风控发生在 requests 侧，浏览器页面里
+                    # 不会弹验证码给用户完成，旧逻辑会无限循环卡住（用户反馈“验证码不出来”）。
+                    self._wait_for_browser_confirmation(session_id, deadline)
+                    cookie_bundle = self._build_cookie_bundle(context.cookies())
+                    try:
+                        self._validate_search_cookie(cookie_bundle["douyin"])
+                    except VerificationRequiredError:
+                        self._set_browser_login_state(
+                            session_id,
+                            "saving",
+                            False,
+                            "登录 Cookie 已获取并保存。提示：搜索接口可能仍需验证，"
+                            "若采集时报验证码，按提示在采集流程里处理即可。",
+                            confirm_requested=False,
+                        )
+                    return cookie_bundle
                 time.sleep(2)
             raise TimeoutError("等待网页登录超时")
 
