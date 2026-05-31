@@ -38,7 +38,7 @@ jobs:
 
       - name: PyInstaller 打包
         run: >
-          pyinstaller --noconfirm --clean --windowed
+          pyinstaller --noconfirm --clean --console
           --name liangbashuazi
           --paths .
           --collect-submodules desktop --collect-submodules web
