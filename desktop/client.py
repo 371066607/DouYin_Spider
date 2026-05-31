@@ -1569,11 +1569,72 @@ class AgentDesktopApp(ctk.CTk):
             from desktop.bootstrap import ensure_chromium
         except Exception:
             return True
-        self.after(0, lambda: self._status_var.set("检查浏览器（首次使用需下载，约 1-2 分钟，请稍候）……"))
-        ok, msg = ensure_chromium()
+        self.after(0, lambda: self._status_var.set("检查浏览器内核……"))
+
+        def on_progress(text: str) -> None:
+            self.after(0, lambda t=text: self._update_chromium_progress(t))
+
+        ok, msg = ensure_chromium(on_progress=on_progress)
+        self.after(0, self._close_chromium_progress)
         if not ok:
-            self.after(0, lambda m=msg: messagebox.showerror("浏览器准备失败", f"无法准备浏览器：\n{m}"))
+            self.after(0, lambda m=msg: messagebox.showerror(
+                "浏览器下载失败",
+                "首次使用需要下载浏览器内核（约 180MB），但这次没下成功。\n\n"
+                "多为网络波动，稍后再点一次「网页登录」通常即可；\n"
+                "若多次失败，请换个网络（或挂代理）再试。\n\n"
+                f"技术细节：{m}",
+            ))
         return ok
+
+    def _update_chromium_progress(self, text: str) -> None:
+        """主线程：懒创建下载进度框（已装好则不弹），持续更新文案/进度。"""
+        dlg = getattr(self, "_chromium_dlg", None)
+        if dlg is None or not dlg.winfo_exists():
+            dlg = ctk.CTkToplevel(self)
+            dlg.title("首次使用准备")
+            dlg.geometry("440x170")
+            dlg.transient(self)
+            dlg.resizable(False, False)
+            dlg.protocol("WM_DELETE_WINDOW", lambda: None)  # 下载中不允许关闭
+            ctk.CTkLabel(
+                dlg, text="🌐 首次使用，正在下载浏览器内核",
+                font=ctk.CTkFont(size=15, weight="bold"),
+            ).pack(pady=(22, 6))
+            self._chromium_msg = ctk.CTkLabel(dlg, text=text, wraplength=400)
+            self._chromium_msg.pack(pady=2)
+            bar = ctk.CTkProgressBar(dlg, width=380)
+            bar.pack(pady=12)
+            bar.configure(mode="indeterminate")
+            bar.start()
+            self._chromium_bar = bar
+            ctk.CTkLabel(
+                dlg, text="约 180MB，仅首次需要，完成后自动继续，请耐心等待",
+                text_color="#9a8c82",
+            ).pack()
+            self._chromium_dlg = dlg
+        else:
+            try:
+                self._chromium_msg.configure(text=text)
+            except Exception:
+                pass
+        match = re.search(r"(\d+)%", text)
+        if match:
+            try:
+                self._chromium_bar.stop()
+                self._chromium_bar.configure(mode="determinate")
+                self._chromium_bar.set(int(match.group(1)) / 100.0)
+            except Exception:
+                pass
+        self._status_var.set(text)
+
+    def _close_chromium_progress(self) -> None:
+        dlg = getattr(self, "_chromium_dlg", None)
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+            self._chromium_dlg = None
 
     def _browser_login(self) -> None:
         login = getattr(self.services, "login", None)

@@ -128,9 +128,17 @@ def _setup_frozen_runtime():
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers  # 打包版强制用用户目录（首次下载到这）
 
 
-def ensure_chromium():
+def ensure_chromium(on_progress=None):
     """检测 chromium，缺则用 playwright 自带 driver 下载。返回 (ok, message)。
-    开发环境(.playwright 已有 chromium)会直接返回 True，不下载。"""
+    开发环境(.playwright 已有 chromium)会直接返回 True，不下载。
+    on_progress(text)：可选回调，下载过程中持续上报「正在下载…NN%」等文案。"""
+    def report(text):
+        if on_progress:
+            try:
+                on_progress(text)
+            except Exception:
+                pass
+
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
@@ -140,6 +148,7 @@ def ensure_chromium():
     except Exception:
         pass
     try:
+        import re
         import subprocess
         from playwright._impl._driver import compute_driver_executable, get_driver_env
         drv = compute_driver_executable()
@@ -155,20 +164,53 @@ def ensure_chromium():
         else:
             hosts = ["https://cdn.npmmirror.com/binaries/playwright", ""]
 
+        # 隐藏 Windows 上子进程弹出的黑色控制台窗口
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+
         last = ""
-        for host in hosts:
+        for hi, host in enumerate(hosts):
             env = dict(base_env)
             if host:
                 env["PLAYWRIGHT_DOWNLOAD_HOST"] = host
             else:
                 env.pop("PLAYWRIGHT_DOWNLOAD_HOST", None)
-            for _ in range(2):  # 每个源重试一次，扛偶发网络中断
-                result = subprocess.run(
-                    [*drv, "install", "chromium"], env=env, capture_output=True, text=True
-                )
-                if result.returncode == 0:
-                    return True, "浏览器下载完成"
-                last = (result.stderr or result.stdout or "")[-300:]
+            src_label = "国内镜像" if host else "官方源"
+            report(f"正在准备浏览器内核（{src_label}，约 180MB）…")
+            proc = subprocess.Popen(
+                [*drv, "install", "chromium"], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=creationflags,
+            )
+            buf = ""
+            last_pct = -1
+            lines = []
+            while True:
+                ch = proc.stdout.read(1)
+                if not ch:
+                    break
+                if ch in ("\r", "\n"):
+                    seg = buf.strip()
+                    buf = ""
+                    if not seg:
+                        continue
+                    lines.append(seg)
+                    m = re.search(r"(\d+)%", seg)
+                    if m:
+                        pct = int(m.group(1))
+                        if pct != last_pct:
+                            last_pct = pct
+                            report(f"正在下载浏览器内核（{src_label}）… {pct}%")
+                    elif "ownload" in seg or "下载" in seg:
+                        report(f"正在下载浏览器内核（{src_label}）…")
+                else:
+                    buf += ch
+            proc.wait()
+            if proc.returncode == 0:
+                return True, "浏览器下载完成"
+            last = "\n".join(lines[-6:])[-300:]
+            if hi < len(hosts) - 1:
+                report("该下载源失败，正在切换备用源重试…")
         return False, last
     except Exception as exc:
         return False, str(exc)
