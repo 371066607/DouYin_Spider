@@ -38,6 +38,11 @@ jobs:
           npm --version
           npm install --ignore-scripts
 
+      - name: 写入构建版本号（用于检查更新比对）
+        run: |
+          printf "SHA = '%s'\nRUN = '%s'\n" "${{ github.sha }}" "${{ github.run_number }}" > desktop/_build_info.py
+          cat desktop/_build_info.py
+
       - name: PyInstaller 打包（生成 .app）
         run: >
           pyinstaller --noconfirm --clean --windowed

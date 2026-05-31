@@ -38,3 +38,6 @@ datas
 skills/
 delta_client_assets/
 output/
+
+# CI 生成的构建版本号
+desktop/_build_info.py

@@ -49,6 +49,15 @@ if sys.platform == "win32":
 
     _subprocess.Popen.__init__ = _no_window_popen_init
 
+# 构建版本号（CI 打包时写入 desktop/_build_info.py），用于「检查更新」比对
+try:
+    from desktop import _build_info as _bi
+    _LOCAL_RUN = str(getattr(_bi, "RUN", "") or "")
+    _LOCAL_SHA = str(getattr(_bi, "SHA", "") or "")
+except Exception:
+    _LOCAL_RUN = ""
+    _LOCAL_SHA = ""
+
 _CTK_IMPORT_ERROR: BaseException | None = None
 try:
     import customtkinter as ctk
@@ -2058,17 +2067,34 @@ class AgentDesktopApp(ctk.CTk):
                 "local": local[:7],
                 "remote": remote[:7],
             }
+        # 打包版：跟「对应平台 Release」的构建号比对（不是跟 master HEAD 比，避免误报）
+        import re as _re
         import requests
-        resp = requests.get(
-            "https://api.github.com/repos/371066607/DouYin_Spider/commits/master", timeout=15
-        )
-        data = resp.json()
-        msg = (data.get("commit", {}).get("message", "") or "").splitlines()
+        plat = "windows" if sys.platform == "win32" else ("macos" if sys.platform == "darwin" else "")
+        local_run = int(_LOCAL_RUN) if str(_LOCAL_RUN).isdigit() else 0
+        latest_run = 0
+        date = ""
+        if plat:
+            try:
+                resp = requests.get(
+                    f"https://api.github.com/repos/371066607/DouYin_Spider/releases/tags/{plat}",
+                    timeout=15,
+                )
+                j = resp.json()
+                body = j.get("body", "") or ""
+                mm = _re.search(r"构建号\s*(\d+)", body)
+                latest_run = int(mm.group(1)) if mm else 0
+                date = (j.get("published_at", "") or "")[:10]
+            except Exception:
+                pass
         return {
             "mode": "zip",
-            "latest": (data.get("sha", "") or "")[:7],
-            "date": (data.get("commit", {}).get("author", {}).get("date", "") or "")[:10],
-            "msg": (msg[0] if msg else "")[:60],
+            "plat": plat,
+            "local_run": local_run,
+            "latest_run": latest_run,
+            "date": date,
+            "up_to_date": local_run > 0 and latest_run > 0 and local_run >= latest_run,
+            "can_auto": local_run > 0 and latest_run > local_run and plat == "windows",
         }
 
     def _show_update_result(self, r: dict) -> None:
@@ -2086,18 +2112,35 @@ class AgentDesktopApp(ctk.CTk):
                     self._do_git_pull()
         else:
             self._status_var.set("已获取最新版本信息")
-            plat = "windows" if sys.platform == "win32" else ("macos" if sys.platform == "darwin" else "")
+            plat = r.get("plat") or ""
             link = (
                 f"https://github.com/371066607/DouYin_Spider/releases/download/{plat}/"
                 f"liangbashuazi-{plat}.zip" if plat else
                 "https://github.com/371066607/DouYin_Spider/releases"
             )
-            messagebox.showinfo(
-                "检查更新",
-                f"GitHub 最新版本：{r.get('latest')} · {r.get('date')}\n{r.get('msg')}\n\n"
-                "打包版无法自动更新。请到 Releases 页下载最新整合包，解压覆盖即可：\n"
-                f"{link}",
-            )
+            if not r.get("local_run") or not r.get("latest_run"):
+                messagebox.showinfo(
+                    "检查更新",
+                    "无法判断当前版本（可能是旧包）。请到 Releases 页下载最新整合包覆盖：\n" + link,
+                )
+                return
+            if r.get("up_to_date"):
+                messagebox.showinfo("检查更新", f"✅ 已是最新版本（构建号 {r.get('local_run')}）。")
+                return
+            if r.get("can_auto"):
+                if messagebox.askyesno(
+                    "发现新版本",
+                    f"当前构建号 {r.get('local_run')} → 最新 {r.get('latest_run')}（{r.get('date')}）\n\n"
+                    "是否现在自动下载并更新？\n"
+                    "约 360MB，下载完成后会自动替换并重启，登录态与数据都会保留。",
+                ):
+                    self._auto_update_download()
+            else:
+                messagebox.showinfo(
+                    "发现新版本",
+                    f"当前构建号 {r.get('local_run')} → 最新 {r.get('latest_run')}。\n\n"
+                    "请到 Releases 页下载最新整合包，解压覆盖即可（登录态保留）：\n" + link,
+                )
 
     def _do_git_pull(self) -> None:
         self._status_var.set("正在更新（git pull）……")
@@ -2134,6 +2177,130 @@ class AgentDesktopApp(ctk.CTk):
             os.execv(sys.executable, [sys.executable, "-m", "desktop.client"])
         except Exception as exc:
             messagebox.showerror("重启失败", f"更新已完成，请手动关闭并重启程序。\n{exc}")
+
+    # --- 打包版一键更新（下载新包→替换→重启，仅 Windows）---
+
+    def _auto_update_download(self) -> None:
+        self._status_var.set("正在下载更新……")
+
+        def worker() -> None:
+            try:
+                self._perform_windows_update()
+            except Exception as exc:
+                self.after(0, lambda e=exc: self._on_update_failed(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_failed(self, exc: BaseException) -> None:
+        self._update_progress_close()
+        self._status_var.set("更新失败")
+        messagebox.showerror(
+            "更新失败",
+            f"自动更新没成功：\n{type(exc).__name__}: {exc}\n\n"
+            "可手动到 Releases 页下载最新整合包覆盖（登录态保留）：\n"
+            "https://github.com/371066607/DouYin_Spider/releases/download/windows/liangbashuazi-windows.zip",
+        )
+
+    def _perform_windows_update(self) -> None:
+        import shutil
+        import tempfile
+        import urllib.request
+        import zipfile
+
+        url = "https://github.com/371066607/DouYin_Spider/releases/download/windows/liangbashuazi-windows.zip"
+        tmp = tempfile.gettempdir()
+        zip_path = os.path.join(tmp, "lbsz_update.zip")
+        extract_dir = os.path.join(tmp, "lbsz_update")
+
+        # 1) 下载（带进度）
+        self.after(0, lambda: self._update_progress_show("正在下载更新…", 0.0))
+        req = urllib.request.urlopen(url, timeout=60)
+        total = int(req.headers.get("Content-Length") or 0)
+        done = 0
+        with open(zip_path, "wb") as fh:
+            while True:
+                chunk = req.read(262144)
+                if not chunk:
+                    break
+                fh.write(chunk)
+                done += len(chunk)
+                if total:
+                    frac = done / total
+                    self.after(0, lambda f=frac: self._update_progress_show(f"正在下载更新… {int(f*100)}%", f))
+
+        # 2) 解压
+        self.after(0, lambda: self._update_progress_show("正在解压…（约 360MB，请稍候）", None))
+        if os.path.isdir(extract_dir):
+            shutil.rmtree(extract_dir, ignore_errors=True)
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(extract_dir)
+
+        # 3) 写替换脚本：等本进程退出→覆盖文件→重启
+        app_dir = os.path.dirname(sys.executable)
+        exe_name = os.path.basename(sys.executable)
+        bat = os.path.join(tmp, "lbsz_update.bat")
+        with open(bat, "w", encoding="gbk", errors="replace") as fh:
+            fh.write(
+                "@echo off\r\n"
+                "chcp 936 >nul\r\n"
+                "echo 正在更新两把刷子获客，请勿关闭本窗口……\r\n"
+                ":wait\r\n"
+                f'tasklist /fi "imagename eq {exe_name}" | find /i "{exe_name}" >nul && (timeout /t 1 >nul & goto wait)\r\n'
+                "timeout /t 1 >nul\r\n"
+                f'xcopy /E /Y /I "{extract_dir}\\*" "{app_dir}\\" >nul\r\n'
+                f'start "" "{app_dir}\\{exe_name}"\r\n'
+                f'rmdir /s /q "{extract_dir}" 2>nul\r\n'
+                f'del "{zip_path}" 2>nul\r\n'
+                'del "%~f0"\r\n'
+            )
+
+        # 4) 启动脚本并退出本进程（os.startfile 不走 CREATE_NO_WINDOW 补丁，更新窗口可见）
+        self.after(0, lambda: self._update_progress_show("准备替换并重启，程序即将关闭…", 1.0))
+        self._save_geometry()
+        os.startfile(bat)  # noqa: S606  (Windows only)
+        os._exit(0)
+
+    def _update_progress_show(self, text: str, fraction: float | None) -> None:
+        dlg = getattr(self, "_upd_dlg", None)
+        if dlg is None or not dlg.winfo_exists():
+            dlg = ctk.CTkToplevel(self)
+            dlg.title("一键更新")
+            dlg.geometry("440x150")
+            dlg.transient(self)
+            dlg.resizable(False, False)
+            dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+            ctk.CTkLabel(dlg, text="⬇️ 正在自动更新", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(20, 6))
+            self._upd_msg = ctk.CTkLabel(dlg, text=text, wraplength=400)
+            self._upd_msg.pack(pady=2)
+            bar = ctk.CTkProgressBar(dlg, width=380)
+            bar.pack(pady=14)
+            self._upd_bar = bar
+            self._upd_dlg = dlg
+        else:
+            try:
+                self._upd_msg.configure(text=text)
+            except Exception:
+                pass
+        try:
+            if fraction is None:
+                self._upd_bar.configure(mode="indeterminate")
+                self._upd_bar.start()
+            else:
+                self._upd_bar.stop()
+                self._upd_bar.configure(mode="determinate")
+                self._upd_bar.set(fraction)
+        except Exception:
+            pass
+        self._status_var.set(text)
+
+    def _update_progress_close(self) -> None:
+        dlg = getattr(self, "_upd_dlg", None)
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+            self._upd_dlg = None
 
 
 def run(services: DesktopServices) -> None:
