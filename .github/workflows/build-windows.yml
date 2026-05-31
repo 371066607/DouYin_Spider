@@ -12,7 +12,9 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # 用 3.11：PyInstaller 打包 asyncio 在 3.12 上有 class Popen(subprocess.Popen)
+          # 触发 "the first argument must be callable" 的已知坑；3.11 最稳。
+          python-version: "3.11"
 
       - uses: actions/setup-node@v4
         with:
