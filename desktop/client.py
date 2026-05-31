@@ -142,6 +142,7 @@ class AgentDesktopApp(ctk.CTk):
         ("直播监控", "live"),
         ("群聊监控", "groups"),
         ("私信功能", "private"),
+        ("💬 实时私信", "im_chat"),
     )
 
     def __init__(self, services: DesktopServices):
@@ -290,6 +291,7 @@ class AgentDesktopApp(ctk.CTk):
             "live": self._build_live_page(stack),
             "groups": self._build_groups_page(stack),
             "private": self._build_private_page(stack),
+            "im_chat": self._build_im_chat_page(stack),
         }
         for page in self._pages.values():
             page.grid(row=0, column=0, sticky="nsew")
@@ -556,6 +558,175 @@ class AgentDesktopApp(ctk.CTk):
         self._button(cookie_btns, "保存 Cookie", self._save_private_cookie)
         self._button(cookie_btns, "Cookie 状态", self._show_cookie_status)
         return page
+
+    # --- 实时私信：聊天界面（仅接收） ---
+
+    def _build_im_chat_page(self, parent: ctk.CTkFrame) -> ctk.CTkFrame:
+        page = self._page(
+            parent, "实时私信",
+            "实时接收抖音私信，按会话查看聊天记录。（当前仅接收，回复功能开发中）",
+        )
+        main = self._content_grid(page)
+        main.grid_columnconfigure(0, weight=0)
+        main.grid_columnconfigure(1, weight=1)
+
+        left = self._panel(main, "会话列表", row=0, column=0, width=250)
+        bar = self._toolbar(left)
+        self._im_recv_btn = ctk.CTkButton(
+            bar, text="开始接收", command=self._toggle_im_receiver,
+            height=28, width=84, font=ctk.CTkFont(size=11),
+        )
+        self._im_recv_btn.pack(side="left", padx=(0, 5))
+        self._button(bar, "刷新", self._refresh_im_chat)
+        self._im_conv_list = ctk.CTkScrollableFrame(left, fg_color="transparent")
+        self._im_conv_list.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 10))
+
+        right = self._panel(main, "聊天记录", row=0, column=1)
+        right.grid_rowconfigure(1, weight=1)
+        self._im_msg_area = ctk.CTkScrollableFrame(right, fg_color="transparent")
+        self._im_msg_area.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        foot = ctk.CTkFrame(right, fg_color="transparent")
+        foot.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
+        foot.grid_columnconfigure(0, weight=1)
+        reply = ctk.CTkEntry(foot, placeholder_text="回复功能开发中，当前仅实时接收对方消息…")
+        reply.configure(state="disabled")
+        reply.grid(row=0, column=0, sticky="ew")
+
+        self._im_selected_conv: str | None = None
+        self._im_conv_sig = None
+        self._im_msg_sig = None
+        return page
+
+    @staticmethod
+    def _im_time(iso: str, full: bool = False) -> str:
+        try:
+            import datetime as _dt
+            dt = _dt.datetime.fromisoformat(iso).astimezone()
+            return dt.strftime("%m-%d %H:%M" if full else "%H:%M")
+        except Exception:
+            return ""
+
+    def _toggle_im_receiver(self) -> None:
+        im = getattr(self.services, "im", None)
+        if im is None:
+            messagebox.showwarning("实时私信", "IM 服务不可用。")
+            return
+        try:
+            running = im.receiver_running()
+        except Exception:
+            running = False
+        if running:
+            try:
+                im.stop_receiver()
+            except Exception:
+                pass
+            self._im_recv_btn.configure(text="开始接收")
+            self._status_var.set("已停止接收私信")
+            return
+        self._status_var.set("正在连接私信通道……")
+        self._im_recv_btn.configure(text="连接中…", state="disabled")
+
+        def work() -> None:
+            try:
+                im.start_receiver()
+                self.after(0, lambda: (
+                    self._im_recv_btn.configure(text="停止接收", state="normal"),
+                    self._status_var.set("🟢 私信通道已连接，实时接收中"),
+                ))
+            except Exception as exc:
+                self.after(0, lambda e=exc: (
+                    self._im_recv_btn.configure(text="开始接收", state="normal"),
+                    self._show_error("实时私信（需先完成网页登录）", e),
+                ))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _select_im_conversation(self, cid: str) -> None:
+        self._im_selected_conv = cid
+        self._im_conv_sig = None  # 强制重绘高亮
+        self._im_msg_sig = None
+        self._refresh_im_chat()
+
+    def _refresh_im_chat(self) -> None:
+        im = getattr(self.services, "im", None)
+        if im is None:
+            return
+        # 同步「开始/停止接收」按钮文案（避开连接中态）
+        try:
+            cur = self._im_recv_btn.cget("text")
+            if cur in ("开始接收", "停止接收"):
+                self._im_recv_btn.configure(text="停止接收" if im.receiver_running() else "开始接收")
+        except Exception:
+            pass
+
+        try:
+            convs = im.list_conversations()
+        except Exception:
+            convs = []
+        sig = hash(tuple((c["conversation_id"], c["last_time"], c["count"]) for c in convs))
+        if sig != self._im_conv_sig:
+            self._im_conv_sig = sig
+            self._render_im_conversations(convs)
+
+        cid = self._im_selected_conv
+        if cid is None and convs:
+            cid = convs[0]["conversation_id"]
+            self._im_selected_conv = cid
+        if cid:
+            try:
+                msgs = im.list_messages(cid)
+            except Exception:
+                msgs = []
+            msig = hash((cid, tuple((m["time"], m["text"]) for m in msgs)))
+            if msig != self._im_msg_sig:
+                self._im_msg_sig = msig
+                self._render_im_messages(msgs)
+
+    def _render_im_conversations(self, convs: list) -> None:
+        for w in self._im_conv_list.winfo_children():
+            w.destroy()
+        if not convs:
+            ctk.CTkLabel(
+                self._im_conv_list, text="暂无私信\n点「开始接收」后等待对方来消息",
+                text_color="gray", justify="left",
+            ).pack(anchor="w", padx=6, pady=10)
+            return
+        for c in convs:
+            cid = c["conversation_id"]
+            active = (cid == self._im_selected_conv)
+            preview = (c.get("preview") or "")[:18]
+            label = f"用户 {c['sender']}\n{preview} · {self._im_time(c['last_time'])} · {c['count']}条"
+            ctk.CTkButton(
+                self._im_conv_list, text=label, anchor="w", justify="left",
+                fg_color=(_NAV_ACTIVE if active else "#F0EAE2"),
+                text_color=(_NAV_ACTIVE_FG if active else "#3A2F28"),
+                hover_color="#E5DCD0", height=50, font=ctk.CTkFont(size=11),
+                command=lambda k=cid: self._select_im_conversation(k),
+            ).pack(fill="x", padx=4, pady=2)
+
+    def _render_im_messages(self, msgs: list) -> None:
+        for w in self._im_msg_area.winfo_children():
+            w.destroy()
+        if not msgs:
+            ctk.CTkLabel(self._im_msg_area, text="（该会话暂无消息）", text_color="gray").pack(pady=20)
+            return
+        for m in msgs:
+            row = ctk.CTkFrame(self._im_msg_area, fg_color="transparent")
+            row.pack(fill="x", pady=3)
+            bubble = ctk.CTkFrame(row, fg_color="#FFFFFF", corner_radius=10)
+            bubble.pack(anchor="w", padx=(2, 60))
+            ctk.CTkLabel(
+                bubble, text=m.get("text") or "", wraplength=430, justify="left",
+                anchor="w", text_color="#222222",
+            ).pack(anchor="w", padx=10, pady=(6, 2))
+            ctk.CTkLabel(
+                bubble, text=self._im_time(m.get("time"), full=True),
+                font=ctk.CTkFont(size=9), text_color="#999999",
+            ).pack(anchor="w", padx=10, pady=(0, 5))
+        try:
+            self._im_msg_area._parent_canvas.yview_moveto(1.0)  # 滚到最新
+        except Exception:
+            pass
 
     # --- Layout helpers ---
 

@@ -73,6 +73,73 @@ class IMService:
             )
             conn.commit()
 
+    # ---- 实时私信：从 event_feed 读取会话与消息，供桌面聊天界面使用 ----
+
+    MSG_TYPES = {"text", "emoji", "voice", "image", "share"}
+
+    @staticmethod
+    def _preview(inner):
+        et = inner.get("event_type")
+        if et == "text":
+            return str(inner.get("content") or "")
+        return {
+            "emoji": "[表情]", "voice": "[语音]", "image": "[图片]", "share": "[分享作品]",
+        }.get(et, f"[{et}]")
+
+    def _iter_im_events(self, order, limit):
+        with connect_db(self.db_path) as conn:
+            cur = conn.execute(
+                f"select payload, created_at from event_feed where channel='im' "
+                f"order by id {order} limit ?",
+                (limit,),
+            )
+            rows = cur.fetchall()
+        for r in rows:
+            try:
+                inner = (json.loads(r["payload"]).get("payload")) or {}
+            except Exception:
+                continue
+            if inner.get("event_type") not in self.MSG_TYPES:
+                continue
+            yield inner, r["created_at"]
+
+    def list_conversations(self, limit=300):
+        """按会话聚合：返回 [{conversation_id, sender, preview, last_time, count}]，最新在前。"""
+        convs = {}
+        for inner, created_at in self._iter_im_events("desc", 5000):
+            cid = str(inner.get("conversation_id") or "")
+            if not cid:
+                continue
+            if cid not in convs:
+                convs[cid] = {
+                    "conversation_id": cid,
+                    "sender": str(inner.get("sender") or ""),
+                    "preview": self._preview(inner),
+                    "last_time": created_at,
+                    "count": 0,
+                }
+            convs[cid]["count"] += 1
+        out = sorted(convs.values(), key=lambda x: x["last_time"], reverse=True)
+        return out[:limit]
+
+    def list_messages(self, conversation_id, limit=500):
+        """某会话的消息流：返回 [{sender, type, text, time}]，最旧在前。"""
+        cid = str(conversation_id or "")
+        msgs = []
+        for inner, created_at in self._iter_im_events("asc", 20000):
+            if str(inner.get("conversation_id") or "") != cid:
+                continue
+            msgs.append({
+                "sender": str(inner.get("sender") or ""),
+                "type": inner.get("event_type"),
+                "text": self._preview(inner),
+                "time": created_at,
+            })
+        return msgs[-limit:]
+
+    def receiver_running(self):
+        return "im:default" in self.task_manager.runtimes
+
     def stop_receiver(self):
         runtime = self.task_manager.runtimes.pop("im:default", None)
         if runtime:
