@@ -1276,7 +1276,7 @@ class AgentDesktopApp(ctk.CTk):
                     row.get("comment_text"),
                     row.get("comment_time_label"),
                     row.get("grade"),
-                    row.get("status"),
+                    self._dm_status_label(row.get("status")),
                     row.get("error_message"),
                     row.get("created_at"),
                 )
@@ -1285,6 +1285,16 @@ class AgentDesktopApp(ctk.CTk):
         )
         status = self._safe_call("private_status", fallback={})
         self._status_var.set(status.get("label", f"私信目标：{len(rows)} 个"))
+
+    @staticmethod
+    def _dm_status_label(status: Any) -> str:
+        return {
+            "pending": "待发送",
+            "sending": "发送中…",
+            "sent": "✅ 已发送",
+            "failed": "❌ 失败",
+            "skipped": "⊘ 已跳过(不接收)",
+        }.get(str(status or ""), str(status or ""))
 
     def _collect_video_ids(self, only_selected: bool) -> list[str]:
         tree = self.video_table

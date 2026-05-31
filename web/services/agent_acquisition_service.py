@@ -88,6 +88,11 @@ class AgentAcquisitionService:
         self.live_service = live_service
         with connect_db(self.db_path) as conn:
             init_db(conn)
+            try:  # 上次发送中途退出，遗留的 sending 还原为 pending，下次能继续发
+                conn.execute("update agent_private_targets set status='pending' where status='sending'")
+                conn.commit()
+            except Exception:
+                pass
 
     def save_video_config(self, values):
         return self._save_config("video", self.DEFAULT_VIDEO_CONFIG, values)

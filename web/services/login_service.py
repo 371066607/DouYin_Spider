@@ -281,6 +281,10 @@ class LoginService:
                         if self.broker:
                             self.broker.publish("events", {"channel": "dm", "message": f"已达每日上限 {daily_limit} 条，停止发送"})
                         break
+                    # 发送前先标记「发送中」并广播，让列表实时反映进度
+                    self._set_dm_sending(t.get("id"))
+                    if self.broker:
+                        self.broker.publish("events", {"channel": "dm", "message": f"正在发送：{t.get('nickname', '')}"})
                     try:
                         info = self._compose_and_send_on_page(page, t["sec_uid"], message)
                     except Exception as exc:
@@ -331,6 +335,18 @@ class LoginService:
                         "results": results, "aborted": aborted, "limited": limited}
             finally:
                 browser.close()
+
+    def _set_dm_sending(self, target_id):
+        """发送前先把状态置为 sending，让列表实时显示「发送中」。"""
+        if not target_id:
+            return
+        from web.db import connect_db
+        try:
+            with connect_db(self.db_path) as conn:
+                conn.execute("update agent_private_targets set status='sending' where id=?", (target_id,))
+                conn.commit()
+        except Exception:
+            pass
 
     def _mark_dm_status(self, target_id, ok, detail, skipped=False):
         if not target_id:
