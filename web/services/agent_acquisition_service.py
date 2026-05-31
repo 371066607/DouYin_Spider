@@ -9,6 +9,7 @@ import time
 import requests
 
 from web.db import connect_db, init_db
+from web.services.crawl_service import VerificationRequiredError
 from web.services.lead_scoring_service import LeadScoringService
 
 
@@ -95,6 +96,29 @@ class AgentAcquisitionService:
         return self._get_config("video", self.DEFAULT_VIDEO_CONFIG)
 
     def queue_video_collect(self):
+        # 预检：关键词搜索若被风控（verify_check）会让后台采集任务静默失败，
+        # 界面上表现为“一点开始就停止”。这里先同步探一下，给出可操作的提示。
+        config = self.get_video_config()
+        keywords = self._split_lines(config.get("keywords"))
+        if not keywords:
+            raise RuntimeError("请先在右侧填写「关键词」再点开始采集。")
+        try:
+            self.crawl_service.search_general(
+                keywords[0], "1",
+                str(config.get("sort_type") or "0"),
+                str(config.get("publish_time") or "0"),
+                str(config.get("filter_duration") or ""),
+            )
+        except VerificationRequiredError:
+            raise RuntimeError(
+                "搜索被抖音验证拦截，所以采集刚开始就停了。\n\n"
+                "解决办法：\n"
+                "1) 点左下角「🔑 网页登录」重新登录；\n"
+                "2) 登录后程序会自动打开一个「搜索页」，请在那个页面里完成滑块/验证码；\n"
+                "3) 完成后再回到小窗点「我已完成」保存。\n\n"
+                "之后再来「视频采集」就能正常搜索了。\n"
+                "（提示：评论监控不走搜索接口，所以不受影响。）"
+            )
         stop_event = threading.Event()
         self.task_manager.runtimes[self.VIDEO_RUNTIME_KEY] = stop_event
 
