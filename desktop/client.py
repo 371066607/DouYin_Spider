@@ -1827,15 +1827,25 @@ def main() -> None:
         raise SystemExit(1)
     try:
         from desktop.bootstrap import build_services
+        run(build_services())
     except Exception as exc:
-        import tkinter as _tk
-        from tkinter import messagebox as _mb
-        root = _tk.Tk()
-        root.withdraw()
-        _mb.showerror("启动失败", f"无法导入 desktop.bootstrap.build_services：\n{type(exc).__name__}: {exc}")
-        root.destroy()
-        return
-    run(build_services())
+        import traceback
+        detail = traceback.format_exc()
+        sys.stderr.write(detail + "\n")
+        try:
+            import tkinter as _tk
+            from tkinter import messagebox as _mb
+            root = _tk.Tk()
+            root.withdraw()
+            _mb.showerror(
+                "启动失败",
+                f"客户端启动时出错：\n{type(exc).__name__}: {exc}\n\n"
+                "请把这个窗口和命令行里的报错截图发给开发者。",
+            )
+            root.destroy()
+        except Exception:
+            pass
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
