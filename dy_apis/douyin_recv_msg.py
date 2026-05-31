@@ -1,5 +1,6 @@
 import hashlib
 import json
+import time
 
 import websocket
 from websocket import WebSocketApp
@@ -124,11 +125,8 @@ class DouyinRecvMsg:
             print("\033[31m### error ###")
             print(error)
             print("### ===error=== ###\033[m")
-        if (
-            isinstance(error, ConnectionRefusedError)
-            or isinstance(error, websocket._exceptions.WebSocketConnectionClosedException)
-        ) and self.auto_reconnect and not self._stopped:
-            self.start()
+        # 注意：不在这里递归调用 self.start()，否则 run_forever 会层层嵌套、
+        # 断线多了栈不断增长直至溢出。重连交给 start() 里的循环处理。
 
     def on_close(self, ws, close_status_code, close_msg):
         if self.close_sink:
@@ -139,28 +137,38 @@ class DouyinRecvMsg:
             print("### ===closed=== ###\033[m")
 
     def start(self):
-        self.ws = WebSocketApp(
-            url=self.url,
-            header={
-                'Pragma': 'no-cache',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-                'User-Agent': HeaderBuilder.ua,
-                'Cache-Control': 'no-cache',
-                'Sec-WebSocket-Protocol': 'binary, base64, pbbp2',
-                'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits'
-            },
-            cookie=self.auth.cookie_str,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-            on_open=self.on_open
-        )
-        try:
-            self.ws.run_forever(origin='https://www.douyin.com')
-        except KeyboardInterrupt:
-            self.ws.close()
-        except:
-            self.ws.close()
+        # 循环重连：run_forever 每次因断线/出错返回后，若未 stop 且允许重连，
+        # 退避几秒再连。用循环而非递归，避免调用栈无限增长。
+        while not self._stopped:
+            self.ws = WebSocketApp(
+                url=self.url,
+                header={
+                    'Pragma': 'no-cache',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                    'User-Agent': HeaderBuilder.ua,
+                    'Cache-Control': 'no-cache',
+                    'Sec-WebSocket-Protocol': 'binary, base64, pbbp2',
+                    'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits'
+                },
+                cookie=self.auth.cookie_str,
+                on_message=self.on_message,
+                on_error=self.on_error,
+                on_close=self.on_close,
+                on_open=self.on_open
+            )
+            try:
+                self.ws.run_forever(origin='https://www.douyin.com')
+            except KeyboardInterrupt:
+                self.ws.close()
+                break
+            except Exception:
+                try:
+                    self.ws.close()
+                except Exception:
+                    pass
+            if self._stopped or not self.auto_reconnect:
+                break
+            time.sleep(3)  # 重连退避，避免疯狂重连
 
 
 if __name__ == '__main__':

@@ -2086,10 +2086,17 @@ class AgentDesktopApp(ctk.CTk):
                     self._do_git_pull()
         else:
             self._status_var.set("已获取最新版本信息")
+            plat = "windows" if sys.platform == "win32" else ("macos" if sys.platform == "darwin" else "")
+            link = (
+                f"https://github.com/371066607/DouYin_Spider/releases/download/{plat}/"
+                f"liangbashuazi-{plat}.zip" if plat else
+                "https://github.com/371066607/DouYin_Spider/releases"
+            )
             messagebox.showinfo(
                 "检查更新",
                 f"GitHub 最新版本：{r.get('latest')} · {r.get('date')}\n{r.get('msg')}\n\n"
-                "你是 zip 下载版，无法自动更新。\n请到 GitHub 仓库重新「Download ZIP」覆盖即可。",
+                "打包版无法自动更新。请到 Releases 页下载最新整合包，解压覆盖即可：\n"
+                f"{link}",
             )
 
     def _do_git_pull(self) -> None:
