@@ -31,6 +31,24 @@ if sys.stdout is None or sys.stderr is None:
     if sys.stderr is None:
         sys.stderr = _log_fp
 
+# Windows 无控制台打包下，子进程（execjs 调 node 做 a_bogus 签名、git 等）默认会
+# 弹出黑色控制台窗口；采集/监控每翻一页都签名一次，于是黑框疯狂闪。给所有
+# subprocess.Popen 统一注入 CREATE_NO_WINDOW，从根上消除黑框（只抑制控制台窗口，
+# 不影响 playwright 弹出的浏览器 GUI 窗口）。
+if sys.platform == "win32":
+    import subprocess as _subprocess
+    _CREATE_NO_WINDOW = 0x08000000
+    _orig_popen_init = _subprocess.Popen.__init__
+
+    def _no_window_popen_init(self, *args, **kwargs):
+        try:
+            kwargs["creationflags"] = int(kwargs.get("creationflags") or 0) | _CREATE_NO_WINDOW
+        except Exception:
+            pass
+        _orig_popen_init(self, *args, **kwargs)
+
+    _subprocess.Popen.__init__ = _no_window_popen_init
+
 _CTK_IMPORT_ERROR: BaseException | None = None
 try:
     import customtkinter as ctk
