@@ -493,11 +493,18 @@ class LoginService:
         search_url = f"https://www.douyin.com/search/{urllib.parse.quote('三角洲')}?type=general"
         live_url = "https://live.douyin.com/"
         with sync_playwright() as p:
+            # 去掉 --enable-automation 标志并隐藏 navigator.webdriver：否则抖音验证码
+            # 检测到是“被自动化控制的浏览器”，会拒绝渲染/一直转圈出不来（用户反馈）。
+            # 不乱改 UA，避免与真实系统指纹冲突，让验证码尽量正常弹出。
             browser = p.chromium.launch(
                 headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
+                ignore_default_args=["--enable-automation"],
             )
-            context = browser.new_context()
+            context = browser.new_context(locale="zh-CN")
+            context.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+            )
             page = context.new_page()
             page.goto(home_url, wait_until="domcontentloaded")
             self._set_browser_login_state(session_id, "waiting", False, "浏览器已打开，请在新窗口完成登录。")
