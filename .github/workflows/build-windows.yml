@@ -42,22 +42,25 @@ jobs:
           npm --version
           npm install --ignore-scripts
 
-      - name: 写入构建版本号（用于检查更新比对）
+      - name: 写入代码版本号（commit 时间戳，跨平台一致，用于补丁热更新比对）
         shell: pwsh
         run: |
-          "SHA = '${{ github.sha }}'`r`nRUN = '${{ github.run_number }}'" | Out-File -Encoding utf8 desktop/_build_info.py
-          Get-Content desktop/_build_info.py
+          $ver = (git show -s --format=%ct HEAD)
+          [System.IO.File]::WriteAllText("$PWD/code_version.txt", "$ver")
+          Write-Host "code_version=$ver"
 
-      - name: PyInstaller 打包
+      - name: PyInstaller 打包（入口=瘦启动器 launcher.py，支持代码补丁热更新）
         run: >
           pyinstaller --noconfirm --clean --windowed
           --name liangbashuazi
           --paths .
           --collect-submodules desktop --collect-submodules web
           --collect-submodules dy_apis --collect-submodules dy_live
+          --collect-submodules utils --collect-submodules builder
           --collect-all customtkinter --collect-all playwright
           --add-data "desktop/claude_theme.json;desktop"
-          desktop/client.py
+          --add-data "code_version.txt;."
+          launcher.py
 
       - name: 后处理：拷 static + node_modules + chromium 进包
         shell: pwsh

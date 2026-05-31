@@ -41,3 +41,4 @@ output/
 
 # CI 生成的构建版本号
 desktop/_build_info.py
+code_version.txt
