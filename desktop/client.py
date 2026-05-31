@@ -522,8 +522,8 @@ class AgentDesktopApp(ctk.CTk):
         toolbar = self._toolbar(left)
         self._button(toolbar, "导入 UID", self._import_private_uids)
         self._button(toolbar, "半自动", self._semi_auto_dm)
-        self._button(toolbar, "单个发送", self._auto_send_dm)
-        self._button(toolbar, "自动发送", self._start_auto_send_batch)
+        self._button(toolbar, "发选中行", self._auto_send_dm)
+        self._button(toolbar, "自动发未发送", self._start_auto_send_batch)
         self._button(toolbar, "停止", self._stop_auto_send)
         self._send_daemon_btn = ctk.CTkButton(
             toolbar, text="守护", command=self._toggle_send_daemon, height=28, width=72, font=ctk.CTkFont(size=11)
@@ -564,7 +564,7 @@ class AgentDesktopApp(ctk.CTk):
             multiline={"message_text", "card_payload"},
             switches={"headless_mode"},
             hints={
-                "message_text": "私信内容；多条话术用单独一行 --- 分隔，发送时随机选一条（防雷同被风控）",
+                "message_text": "私信内容；多条话术每行写一条，发送时随机选一条（防雷同被风控）",
                 "send_interval_seconds": "每条基础间隔秒数；实际会在此值~2倍之间随机，建议 ≥ 30",
                 "daily_limit": "每天最多发多少条，达到就停；0 = 不限。建议设个上限更安全",
                 "active_hours": "只在此时段发，如 9-22 表示 9:00–22:00；留空=不限。半夜不发更像真人",
@@ -1422,9 +1422,10 @@ class AgentDesktopApp(ctk.CTk):
             return
         sent = result.get("sent", 0)
         failed = result.get("failed", 0)
+        skipped = result.get("skipped", 0)
         total = result.get("total", 0)
-        self._status_var.set(f"批量发送结束：成功 {sent}，失败 {failed}，共 {total}")
-        self._log_private(f"———— 批量结束：成功 {sent} / 失败 {failed} / 共 {total} ————")
+        self._status_var.set(f"批量发送结束：成功 {sent}，跳过 {skipped}，失败 {failed}，共 {total}")
+        self._log_private(f"———— 批量结束：成功 {sent} / 跳过 {skipped}（对方不收私信） / 失败 {failed} / 共 {total} ————")
         for r in (result.get("results") or []):
             if r.get("ok"):
                 self._log_private(f"✅ {r.get('nickname', '')} 发送成功")

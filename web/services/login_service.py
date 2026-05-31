@@ -132,11 +132,11 @@ class LoginService:
         return browser, context
 
     def _pick_message(self, message):
-        """多条话术（用单独一行 --- 分隔）时随机选一条，降低雷同被风控概率。"""
-        blocks = [b.strip() for b in str(message or "").split("\n---\n") if b.strip()]
-        if len(blocks) <= 1:
+        """多条话术：每行一条，发送时随机选一条，降低雷同被风控概率。"""
+        lines = [ln.strip() for ln in str(message or "").splitlines() if ln.strip()]
+        if len(lines) <= 1:
             return str(message or "").strip()
-        return random.choice(blocks)
+        return random.choice(lines)
 
     def _compose_and_send_on_page(self, page, sec_uid, message):
         """在已打开的浏览器 page 上，给某 sec_uid 发一条私信。返回 {ok, step, detail}。"""
@@ -180,6 +180,12 @@ class LoginService:
                 if editor is not None:
                     break
         if editor is None:
+            # 区分「对方不接收私信」(正常，跳过) 和 真失败（登录失效/页面异常）
+            if self._is_dm_restricted(page):
+                info["step"] = "skipped"
+                info["skipped"] = True
+                info["detail"] = "对方隐私设置不接收私信，已跳过"
+                return info
             info["detail"] = "未找到私信输入框 (URL=%s, iframe=%d, frames=%d)" % (
                 page.url, page.locator("iframe").count(), len(page.frames),
             )
@@ -195,9 +201,29 @@ class LoginService:
         editor.press("Enter")
         page.wait_for_timeout(2500)
 
+        # 校验是否真的发出去：对方隐私设置会提示「发送失败/无法发送消息」
+        if self._is_dm_restricted(page):
+            info["ok"] = False
+            info["step"] = "skipped"
+            info["skipped"] = True
+            info["detail"] = "对方隐私设置不接收私信，已跳过"
+            return info
+
         info["ok"] = True
         info["step"] = "done"
         return info
+
+    @staticmethod
+    def _is_dm_restricted(page):
+        """页面是否出现「对方不接收私信」类提示（隐私设置 / 发送失败）。"""
+        try:
+            body = page.inner_text("body")
+        except Exception:
+            body = ""
+        return any(
+            kw in body
+            for kw in ("由于对方的隐私设置", "无法发送消息", "无法向对方发送", "对方拒收", "发送失败")
+        )
 
     def send_dm_browser(self, sec_uid, message, headless=False):
         """单条：开浏览器给某人发一条私信。ticket 由浏览器在发送时实时生成。"""
@@ -231,7 +257,7 @@ class LoginService:
         if not targets:
             return {"sent": 0, "failed": 0, "total": 0, "results": []}
         cookies = self._douyin_cookies()
-        sent = failed = 0
+        sent = failed = skipped = 0
         sent_in_batch = 0
         results = []
         total = len(targets)
@@ -260,24 +286,29 @@ class LoginService:
                     except Exception as exc:
                         info = {"ok": False, "step": "exception", "detail": str(exc)[:200]}
                     ok = bool(info.get("ok"))
-                    sent += 1 if ok else 0
-                    failed += 0 if ok else 1
+                    is_skip = bool(info.get("skipped"))
                     if ok:
+                        sent += 1
                         sent_today += 1
                         consecutive_fail = 0
+                    elif is_skip:
+                        # 对方不接收私信：跳过这个人，继续发下一个；不计失败、不触发熔断
+                        skipped += 1
                     else:
+                        failed += 1
                         consecutive_fail += 1
-                    self._mark_dm_status(t.get("id"), ok, info.get("detail", ""))
-                    results.append({"id": t.get("id"), "nickname": t.get("nickname"), "ok": ok, "step": info.get("step")})
+                    self._mark_dm_status(t.get("id"), ok, info.get("detail", ""), skipped=is_skip)
+                    results.append({"id": t.get("id"), "nickname": t.get("nickname"), "ok": ok, "skipped": is_skip, "step": info.get("step")})
                     if consecutive_fail >= 3:
                         aborted = "连续 3 条发送失败，可能登录失效或被风控，已自动停止"
                         if self.broker:
                             self.broker.publish("events", {"channel": "dm", "message": aborted})
                         break
                     if self.broker:
+                        mark = "✓" if ok else ("⊘跳过" if is_skip else "✗")
                         self.broker.publish("events", {
                             "channel": "dm",
-                            "message": f"{idx + 1}/{total} {'✓' if ok else '✗'} {t.get('nickname', '')}",
+                            "message": f"{idx + 1}/{total} {mark} {t.get('nickname', '')}",
                         })
                     if should_stop and should_stop():
                         break
@@ -296,17 +327,17 @@ class LoginService:
                             wait = random.uniform(max(interval_seconds, 1), max(interval_seconds, 1) * 2)
                             if self._interruptible_wait(page, wait, should_stop):
                                 break
-                return {"sent": sent, "failed": failed, "total": total, "results": results,
-                        "aborted": aborted, "limited": limited}
+                return {"sent": sent, "failed": failed, "skipped": skipped, "total": total,
+                        "results": results, "aborted": aborted, "limited": limited}
             finally:
                 browser.close()
 
-    def _mark_dm_status(self, target_id, ok, detail):
+    def _mark_dm_status(self, target_id, ok, detail, skipped=False):
         if not target_id:
             return
         from web.db import connect_db
         from datetime import datetime, timezone
-        status = "sent" if ok else "failed"
+        status = "sent" if ok else ("skipped" if skipped else "failed")
         sent_at = datetime.now(timezone.utc).isoformat() if ok else None
         try:
             with connect_db(self.db_path) as conn:
