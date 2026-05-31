@@ -91,14 +91,14 @@ jobs:
           name: liangbashuazi-windows
           path: liangbashuazi-windows.zip
 
-      - name: 发布到 Releases（公开下载链接，普通用户免登录可下）
+      - name: 发布到 Releases（固定 tag=windows，永久链接稳定）
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $tag = "build-$($env:GITHUB_RUN_NUMBER)"
-          gh release create $tag liangbashuazi-windows.zip `
-            --title "两把刷子获客 $tag" `
-            --notes "GitHub 自动构建，并通过 Windows 冒烟自检（导入 + 建服务 + a_bogus 签名）。下载 zip 解压后双击 liangbashuazi.exe 即用，无需安装 Python/Node。"
-          Write-Host "已发布。永久下载链接（始终指向最新版）："
-          Write-Host "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/liangbashuazi-windows.zip"
+          $notes = "GitHub 自动构建并通过 Windows 冒烟自检（导入 + 建服务 + a_bogus 签名 + 内置 chromium）。下载解压后双击 liangbashuazi.exe 即用，无需安装 Python/Node。构建号 $($env:GITHUB_RUN_NUMBER)。"
+          gh release create windows liangbashuazi-windows.zip --title "两把刷子获客 · Windows" --notes "$notes" 2>$null
+          gh release upload windows liangbashuazi-windows.zip --clobber
+          gh release edit windows --title "两把刷子获客 · Windows" --notes "$notes"
+          Write-Host "永久下载链接："
+          Write-Host "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/windows/liangbashuazi-windows.zip"

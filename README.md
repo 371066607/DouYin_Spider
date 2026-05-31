@@ -1,220 +1,99 @@
 <p align="center">
-  <a href="https://github.com/cv-cat/Douyin_Spider" target="_blank" align="center" alt="Go to Douyin_Spider Website">
-    <picture>
-      <img width="220" src="./author/logo.jpg" alt="Douyin_Spider logo">
-    </picture>
+  <a href="https://github.com/cv-cat/DouYin_Spider" target="_blank">
+    <img width="200" src="./author/logo.jpg" alt="DouYin_Spider logo">
   </a>
 </p>
+
 <div align="center">
-    <a href="https://www.python.org/">
-        <img src="https://img.shields.io/badge/python-3.7%2B-blue" alt="Python 3.7+">
-    </a>
-    <a href="https://nodejs.org/zh-cn/">
-        <img src="https://img.shields.io/badge/nodejs-18%2B-blue" alt="NodeJS 18+">
-    </a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/nodejs-18%2B-blue" alt="NodeJS 18+">
+  <img src="https://img.shields.io/badge/GUI-CustomTkinter-orange" alt="CustomTkinter">
+  <img src="https://img.shields.io/badge/license-学习研究-lightgrey" alt="Learning only">
 </div>
 
-# 🎶DouYin_Spider
+# 🎶 两把刷子获客 · 桌面客户端版
 
-**✨ 专业的抖音数据采集与交互解决方案，支持数据爬取、直播间监听、私信收发等功能**
+> **本项目 fork 自原作者 [cv-cat / DouYin_Spider](https://github.com/cv-cat/DouYin_Spider)。**
+> 抖音数据采集、请求签名（a_bogus 等）、直播间监听、私信收发等**全部核心能力均来自原作者 cv-cat**，在此致谢并署名。
+> 本分支只做了一件事：**在原项目之上封装了一个桌面客户端（GUI）**，并补齐打包分发与一些体验优化，方便不懂命令行的人直接双击使用。
 
-大模型时代，自动化是每个开发者都绕不开的课题。
-当你想让 AI Agent 真正落地到抖音——自动处理私信、感知直播间动态、驱动内容互动——第一道墙往往不是模型能力，而是**平台通信能力的缺失**。
+---
 
-本项目做的事很简单：把这道墙拆掉。
+## ⚠️ 免责声明（请务必阅读）
 
-**⚠️ 严禁用于发布不良信息、违法内容！本项目仅供学习与技术研究使用，如有侵权请联系作者删除，后果自负。**
+- 本项目（含本分支的全部改动）**仅供个人学习、技术研究与交流使用，不用于任何商业用途**。
+- 本分支作者只是出于**学习目的**，在原项目基础上练习「把命令行工具封装成桌面客户端」，并非商用产品。
+- **严禁**用于发布不良/违法信息、批量骚扰、灰黑产或任何违反抖音平台规则与法律法规的行为。
+- 使用本项目所产生的一切后果，由使用者自行承担，与原作者 cv-cat 及本分支作者均无关。
+- 本项目不对数据准确性、可用性、账号安全做任何担保；自动化操作存在账号风险，请谨慎、小批量使用。
+- 如有侵权或不妥，请联系删除。
 
-## 🌟 功能特性
+---
 
-- ✅ **多维度数据采集**
-  - 用户主页信息 / 作品详情
-  - 评论区数据（含多级回复）
-  - 智能搜索（视频 / 用户 / 直播）
-  - 关注 / 粉丝列表
-  - 消息通知 / 收藏列表 / 推荐流
-- 🎙️ **直播间实时监听**
-  - 弹幕消息 / 礼物（含送礼对象）/ 进场 / 关注 / 点赞 / 房间热度
-  - 直播间发送弹幕消息
-  - 直播间点赞
-- 💬 **抖音私信收发**
-  - WebSocket 实时接收私信（文本 / 表情包 / 语音 / 图片 / 分享视频）
-  - 主动发送私信
-  - 创建 / 查询会话列表
-- 🤝 **互动操作**
-  - 点赞视频
-  - 发布评论 / 回复评论
-  - 收藏 / 移动 / 取消收藏作品
-- 🚀 **高性能架构**
-  - 自动重试机制 / 断线重连
-- 🔒 **安全稳定**
-  - 抖音最新 API 适配
-  - 异常处理机制
-  - proxy 代理
-- 🎨 **便捷管理**
-  - 结构化目录存储
-  - 格式化输出（JSON / EXCEL / MEDIA）
+## 🆕 本分支新增了什么（桌面客户端）
 
-## 🎨效果图
-### 处理后的所有用户
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/3f3ff858-c443-4a68-bae6-1d16ef43011d)
-### 某个用户所有的视频\图集
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/fa6f5e65-7e3c-4abf-b140-cd20c33d3b43)
-### 某个视频\图集具体的内容
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/16cfc027-6186-4914-bca4-901f886a9b82)
-### 某个直播时的具体弹幕发言和礼物数据
-![image](https://github.com/cv-cat/DouYin_Spider/assets/94289429/e2cde1f1-6309-44fe-8aa3-bca2821bf30d)
-### 保存的excel
-![image](https://github.com/user-attachments/assets/5dfd8fb4-7597-4f54-af6a-9ab8ba766b7c)
+在原命令行 / Web 项目之上，新增了一个基于 **CustomTkinter** 的桌面客户端（暖色 Claude 主题），把原有能力做成「点点点」就能用的界面：
 
+- 🖥️ **桌面 GUI**：视频采集、评论监控、直播监控、群聊监控、私信功能，统一在一个窗口里
+- 🔗 **采集→监控联动**：采集到的视频可一键转入评论监控
+- 🧭 **评论线索面板**：发布时间排序、包含/排除关键词实时过滤、**评级（S/A/B/C）过滤**（仅过滤列表显示，不影响后台监控）
+- 💬 **实时私信（新功能）**：基于 WebSocket 实时接收抖音私信，左侧会话列表 + 右侧聊天气泡，按会话查看，自动反查昵称（当前仅接收）
+- 🔑 **网页登录**：内置浏览器走 JS 风控扫码登录，自动保存 Cookie
+- 🛡️ **私信防风控**：话术随机、间隔随机、分批轮流、每日上限、活跃时段、连续失败熔断（仅供学习了解风控机制）
+- 📦 **一键打包分发**：GitHub Actions 自动构建 **Windows / macOS** 双端发行包，**内置 chromium 浏览器内核**，用户双击即用——无需安装 Python / Node / 浏览器
+- 🔄 **检查更新**、窗口大小记忆、关窗即彻底退出等体验优化
 
+### 📸 界面预览
 
-## 🛠️ 快速开始
-### ⛳运行环境
-- Python 3.7+
-- Node.js 18+
+| 视频采集 | 评论监控 |
+|---|---|
+| ![视频采集](./docs/screenshots/01-video.png) | ![评论监控](./docs/screenshots/02-comments.png) |
 
-### 🎯安装依赖
-```
+| 私信功能 | 💬 实时私信 |
+|---|---|
+| ![私信功能](./docs/screenshots/03-private.png) | ![实时私信](./docs/screenshots/04-im.png) |
+
+---
+
+## 🚀 下载即用（推荐）
+
+无需任何环境，下载解压双击即可（首启已内置浏览器内核，无需联网下载）：
+
+- **Windows**：[liangbashuazi-windows.zip](https://github.com/371066607/DouYin_Spider/releases/download/windows/liangbashuazi-windows.zip) → 解压双击 `liangbashuazi.exe`
+- **macOS（Apple Silicon）**：[liangbashuazi-macos.zip](https://github.com/371066607/DouYin_Spider/releases/download/macos/liangbashuazi-macos.zip) → 解压双击 `liangbashuazi.app`
+  - 首次打开若提示「无法验证开发者」，**右键 App 选「打开」**，或终端执行 `xattr -cr liangbashuazi.app`
+
+> 全部发行包均由 [GitHub Actions](./.github/workflows) 自动构建，并在对应平台跑过冒烟自检（导入 + 建服务 + 签名 + chromium 定位）后才发布。
+
+## 🧑‍💻 源码运行（开发者）
+
+需要 Python 3.11+ 与 Node.js 18+：
+
+```bash
 pip install -r requirements.txt
-npm install
+npm install --ignore-scripts        # 跳过 canvas 原生编译（签名不需要它）
+python -m playwright install chromium
+python -m desktop.client            # 启动桌面客户端
 ```
 
-### 🎨配置文件
-这里以小红书的cookie获取为例
+原项目的其它运行方式（CLI / Web UI / 直播监听等）见下文「原项目能力」。
 
-注意.env文件有两个变量，一个是打开www.douyin.com这个域名获取的，另一个是打开live.douyin.com这个域名获取的，第一个用于爬虫，第二个用于直播间监听
+---
 
-配置文件在项目根目录.env文件中，将下图自己的登录cookie放入其中，cookie获取➡️在浏览器f12打开控制台，点击网络，点击fetch，找一个接口点开
-![image](https://github.com/user-attachments/assets/6a7e4ecb-0432-4581-890a-577e0eae463d)
+## 🧱 原项目能力（来自 cv-cat / DouYin_Spider）
 
-复制cookie到.env文件中（注意！登录抖音后的cookie才是有效的，不登陆没有用）
-![image](https://github.com/user-attachments/assets/60291f3f-9b69-423f-8b11-167278d44639)
+以下能力均由原作者实现，本分支仅做界面封装，详情请见 **[原仓库](https://github.com/cv-cat/DouYin_Spider)**：
 
+- **多维度数据采集**：用户主页 / 作品详情 / 评论（含多级回复）/ 搜索 / 关注粉丝 / 推荐流等
+- **直播间实时监听**：弹幕 / 礼物 / 进场 / 关注 / 点赞 / 房间热度，支持发弹幕、点赞
+- **抖音私信收发**：基于 WebSocket 的私信接收与发送
+- **请求签名**：通过 Node.js 还原平台侧指纹（a_bogus / 直播签名等）
 
+## 🙏 致谢
 
-### 🚀运行项目
-```
-# 数据爬取
-python main.py
+- 核心爬虫、签名、直播、私信等全部底层能力，归功于原作者 **[cv-cat](https://github.com/cv-cat)**（[DouYin_Spider](https://github.com/cv-cat/DouYin_Spider)）。
+- 如果原项目对你有帮助，请去给 **原作者** 点个 ⭐ 并支持原作者。
 
-# 直播间监听（弹幕 / 礼物 / 点赞等）
-python dy_live/server.py
+## 📄 出处与许可
 
-# 抖音私信实时接收
-python dy_apis/douyin_recv_msg.py
-```
-
-## Web UI
-
-```bash
-source .venv/bin/activate
-uvicorn web.app:create_app --factory --host 127.0.0.1 --port 8000
-```
-
-- 仅绑定 `127.0.0.1`
-- 页面会直接展示原始异常和 traceback，仅适用于本机调试
-- 没有有效 cookie 时，页面链路可验证，业务结果不可验证
-
-也可以直接用仓库内置后台脚本：
-
-```bash
-source .venv/bin/activate
-./scripts/web-ui start
-./scripts/web-ui status
-./scripts/web-ui logs
-./scripts/web-ui stop
-```
-
-## 搬目录/整包带走
-
-如果你准备把整个项目目录直接拖到另一个文件夹，建议先在新目录里执行：
-
-```bash
-./scripts/portable-env check
-```
-
-如果提示 Python 依赖、`node_modules` 或 Playwright 浏览器缺失，再执行：
-
-```bash
-./scripts/portable-env repair
-./scripts/portable-env install-browsers
-```
-
-或者一次性准备完整运行环境：
-
-```bash
-./scripts/portable-env prepare
-```
-
-说明：
-
-- `portable-env` 会在项目根目录下修复 `.venv`
-- `portable-env install-browsers` 会把 Web UI 登录用到的 Chromium 装到项目内的 `.playwright/`
-- `scripts/web-ui` 和网页登录流程会优先使用项目内 `.playwright/`，不再强依赖系统全局 Playwright 缓存
-- 如果你只是同一台 Mac 上挪文件夹，通常 `check` 就能先看出有没有缺项
-
-### 🗝️注意事项
-- `main.py` 是爬虫入口，可根据需求自行修改调用
-- `dy_apis/douyin_api.py` 包含全部 API 接口封装，含直播间点赞、发消息、私信收发等
-- `dy_live/server.py` 包含直播间 WebSocket 监听逻辑
-- `dy_apis/douyin_recv_msg.py` 包含抖音私信 WebSocket 实时接收逻辑
-
-
-## 🍥日志
-   
-| 日期       | 说明                                   |
-| -------- | ------------------------------------ |
-| 23/10/05 | - 项目完成。 |
-| 23/10/17 | - 首次提交。 |
-| 23/10/18 | - 监听直播间弹幕和礼物。 |
-| 23/10/21 | - 新增搜索智能排序和限制时间。 |
-| 23/10/21 | - 新增可视化界面到release v1.1.0。 |
-| 23/10/25 | - 新增issue提出的输出直播间消息时包括用户等级。 |
-| 23/10/28 | - 遇到验证码请手动点击！Fix Some Bugs。 |
-| 23/11/11 | - 修复了很多很多大家的bug~~，关于v.dy格式的url正在处理 |
-| 23/12/22 | - 修复了直播间监控 |
-| 25/06/07 | - 开放所有之前闭源的代码，包括数据爬取和直播间监听 |
-| 26/04/09 | - 修复直播间礼物信息接收（含送礼对象）；新增直播间点赞、直播间发弹幕；新增抖音私信实时接收（WebSocket）与主动发送功能 |
-
-## 🤝 欢迎贡献 PR
-
-本项目欢迎任何形式的贡献！如果你有新功能想法、Bug 修复或文档改进，欢迎提交 PR。
-
-- Fork 本仓库并在新分支上开发
-- 保持代码风格与现有代码一致
-- PR 描述中请简要说明改动内容和目的
-- 也欢迎通过 [Issue](https://github.com/cv-cat/DouYin_Spider/issues) 提出建议或报告问题
-
-## 🧸额外说明
-1. 感谢star⭐和follow📰！不时更新
-2. 作者的联系方式在主页里，有问题可以随时联系我
-3. 可以关注下作者的其他项目，欢迎 PR 和 issue
-4. 感谢赞助！如果此项目对您有帮助，请作者喝一杯奶茶~~ （开心一整天😊😊）
-5. thank you~~~
-
-<div align="center">
-  <img src="./author/wx_pay.png" width="400px" alt="微信赞赏码"> 
-  <img src="./author/zfb_pay.jpg" width="400px" alt="支付宝收款码">
-</div>
-
-
-## 📈 Star 趋势
-<a href="https://www.star-history.com/#cv-cat/DouYin_Spider&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=cv-cat/DouYin_Spider&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=cv-cat/DouYin_Spider&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=cv-cat/DouYin_Spider&type=Date" />
- </picture>
-</a>
-
-
-## 🍔 交流群
-
-如果你对爬虫和 AI Agent 感兴趣，请加作者主页 wx 通过邀请加入群聊
-
-ps: 请加群14、15，人满或者过期 issue | wx 提醒
-
-![group14](https://github.com/user-attachments/assets/736fa3a2-1e7d-4681-af5e-c15dbefde1cd)
-
-![group15](https://github.com/user-attachments/assets/dbc24f80-4307-46d7-ae83-98d694a306b6)
+本分支为 [cv-cat/DouYin_Spider](https://github.com/cv-cat/DouYin_Spider) 的学习用 fork，遵循原项目的开源与使用条款。仅供学习研究，请勿商用。

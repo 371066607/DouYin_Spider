@@ -189,7 +189,8 @@ class AgentDesktopApp(ctk.CTk):
 
         self._configure_treeview_style()
         self._build_layout()
-        self.show_page("video")
+        _start_page = os.environ.get("DESKTOP_START_PAGE") or "video"
+        self.show_page(_start_page if _start_page in self._pages else "video")
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._start_live_sync()
 
@@ -721,7 +722,8 @@ class AgentDesktopApp(ctk.CTk):
             cid = c["conversation_id"]
             active = (cid == self._im_selected_conv)
             preview = (c.get("preview") or "")[:18]
-            label = f"用户 {c['sender']}\n{preview} · {self._im_time(c['last_time'])} · {c['count']}条"
+            name = c.get("nickname") or f"用户 {c['sender']}"
+            label = f"{name}\n{preview} · {self._im_time(c['last_time'])} · {c['count']}条"
             ctk.CTkButton(
                 self._im_conv_list, text=label, anchor="w", justify="left",
                 fg_color=(_NAV_ACTIVE if active else "#F0EAE2"),

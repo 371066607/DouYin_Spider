@@ -1,0 +1,90 @@
+name: build-macos
+
+# 在 GitHub 网页 Actions 页手动点 "Run workflow" 即可触发（产物为 macOS .app）。
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest   # Apple Silicon (arm64)
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装 Python 依赖 + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 安装 playwright + chromium（装到本地目录，打包进 .app）
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$PWD/ms-playwright"
+          python -m playwright install chromium
+          ls -la ms-playwright
+
+      - name: 生成 node_modules（签名用；--ignore-scripts 跳过 canvas 原生编译）
+        run: |
+          node --version
+          npm --version
+          npm install --ignore-scripts
+
+      - name: PyInstaller 打包（生成 .app）
+        run: >
+          pyinstaller --noconfirm --clean --windowed
+          --name liangbashuazi
+          --paths .
+          --collect-submodules desktop --collect-submodules web
+          --collect-submodules dy_apis --collect-submodules dy_live
+          --collect-all customtkinter --collect-all playwright
+          --add-data "desktop/claude_theme.json:desktop"
+          desktop/client.py
+
+      - name: 后处理：拷 static + node_modules + chromium 进 .app
+        run: |
+          dest="dist/liangbashuazi.app/Contents/Frameworks"
+          cp -R static "$dest/static"
+          cp -R node_modules "$dest/node_modules"
+          cp -R ms-playwright "$dest/ms-playwright"
+          ls "$dest"
+
+      - name: 冒烟自检（在 macOS 上实际运行 .app --selfcheck）
+        run: |
+          BIN="dist/liangbashuazi.app/Contents/MacOS/liangbashuazi"
+          "$BIN" --selfcheck || true
+          SENTINEL="$HOME/liangbashuazi_selfcheck.txt"
+          echo "=== selfcheck 结果 ==="
+          if [ -f "$SENTINEL" ]; then cat "$SENTINEL"; else echo "(无 selfcheck 文件)"; fi
+          echo ""
+          # 用退出码判断成败
+          "$BIN" --selfcheck
+          if [ $? -ne 0 ]; then echo "冒烟自检失败"; exit 1; fi
+          echo "冒烟自检通过：导入 + 建服务 + 签名 + chromium 全部 OK"
+
+      - name: 打包成 zip（保留 .app 结构与可执行权限）
+        run: |
+          cd dist && ditto -c -k --sequesterRsrc --keepParent liangbashuazi.app ../liangbashuazi-macos.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liangbashuazi-macos
+          path: liangbashuazi-macos.zip
+
+      - name: 发布到 Releases（固定 tag=macos，永久链接稳定）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="GitHub 自动构建的 macOS 版（Apple Silicon），通过冒烟自检。首次打开若提示「无法验证开发者」，右键 App 选「打开」，或终端执行 xattr -cr liangbashuazi.app。构建号 ${GITHUB_RUN_NUMBER}。"
+          gh release create macos liangbashuazi-macos.zip --title "两把刷子获客 · macOS" --notes "$notes" 2>/dev/null || true
+          gh release upload macos liangbashuazi-macos.zip --clobber
+          gh release edit macos --title "两把刷子获客 · macOS" --notes "$notes"
+          echo "永久下载链接：https://github.com/${GITHUB_REPOSITORY}/releases/download/macos/liangbashuazi-macos.zip"

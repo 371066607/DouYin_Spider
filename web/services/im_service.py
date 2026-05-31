@@ -103,8 +103,29 @@ class IMService:
                 continue
             yield inner, r["created_at"]
 
+    def _nickname_map(self, uids):
+        """从已采集的评论/视频数据反查 uid→昵称（免费，不额外请求接口）。"""
+        uids = [u for u in {str(x or "") for x in uids} if u]
+        if not uids:
+            return {}
+        placeholders = ",".join("?" * len(uids))
+        out = {}
+        with connect_db(self.db_path) as conn:
+            for table in ("agent_comment_items", "agent_video_items"):
+                try:
+                    rows = conn.execute(
+                        f"select user_id, nickname from {table} "
+                        f"where user_id in ({placeholders}) and nickname <> ''",
+                        tuple(uids),
+                    ).fetchall()
+                    for r in rows:
+                        out.setdefault(str(r["user_id"]), r["nickname"])
+                except Exception:
+                    continue
+        return out
+
     def list_conversations(self, limit=300):
-        """按会话聚合：返回 [{conversation_id, sender, preview, last_time, count}]，最新在前。"""
+        """按会话聚合：返回 [{conversation_id, sender, nickname, preview, last_time, count}]，最新在前。"""
         convs = {}
         for inner, created_at in self._iter_im_events("desc", 5000):
             cid = str(inner.get("conversation_id") or "")
@@ -119,8 +140,11 @@ class IMService:
                     "count": 0,
                 }
             convs[cid]["count"] += 1
-        out = sorted(convs.values(), key=lambda x: x["last_time"], reverse=True)
-        return out[:limit]
+        out = sorted(convs.values(), key=lambda x: x["last_time"], reverse=True)[:limit]
+        nmap = self._nickname_map([c["sender"] for c in out])
+        for c in out:
+            c["nickname"] = nmap.get(c["sender"], "")
+        return out
 
     def list_messages(self, conversation_id, limit=500):
         """某会话的消息流：返回 [{sender, type, text, time}]，最旧在前。"""
