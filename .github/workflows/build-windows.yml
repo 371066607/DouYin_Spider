@@ -52,6 +52,24 @@ jobs:
           Copy-Item -Recurse -Force static "$dest/static"
           Copy-Item -Recurse -Force node_modules "$dest/node_modules"
 
+      - name: 冒烟自检（在 Windows 上实际运行 exe --selfcheck）
+        shell: pwsh
+        run: |
+          $exe = "dist/liangbashuazi/liangbashuazi.exe"
+          Write-Host "运行 $exe --selfcheck ..."
+          $p = Start-Process -FilePath $exe -ArgumentList "--selfcheck" -Wait -PassThru
+          $sentinel = Join-Path $env:USERPROFILE "liangbashuazi_selfcheck.txt"
+          $log = Join-Path $env:USERPROFILE "liangbashuazi.log"
+          Write-Host "=== selfcheck 结果 ==="
+          if (Test-Path $sentinel) { Get-Content $sentinel } else { Write-Host "(无 selfcheck 文件)" }
+          Write-Host "=== app 日志 ==="
+          if (Test-Path $log) { Get-Content $log } else { Write-Host "(无日志)" }
+          if ($p.ExitCode -ne 0) {
+            Write-Error "冒烟自检失败，退出码 $($p.ExitCode)（导入/建服务/签名 至少一步崩了，详见上方）"
+            exit 1
+          }
+          Write-Host "冒烟自检通过：导入 + 建服务 + a_bogus 签名 全部 OK"
+
       - name: 打包成 zip
         shell: pwsh
         run: Compress-Archive -Path dist/liangbashuazi/* -DestinationPath liangbashuazi-windows.zip

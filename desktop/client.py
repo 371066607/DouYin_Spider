@@ -1834,7 +1834,42 @@ def run(services: DesktopServices) -> None:
     app.mainloop()
 
 
+def _run_selfcheck() -> None:
+    """CI 冒烟自检：在打包后的 exe 里跑「导入→建服务→生成签名」，不弹 GUI。
+    结果写入 ~/liangbashuazi_selfcheck.txt，并以退出码 0/1 反馈给 CI。"""
+    import json
+    import traceback
+
+    result: dict[str, Any] = {"ok": False, "steps": {}}
+    out = os.path.join(os.path.expanduser("~"), "liangbashuazi_selfcheck.txt")
+    try:
+        from desktop.bootstrap import build_services
+        result["steps"]["import_bootstrap"] = "ok"
+        build_services()  # 触发 _setup_frozen_runtime（接上 node 路径）
+        result["steps"]["build_services"] = "ok"
+        from utils.dy_util import generate_a_bogus
+        ab = generate_a_bogus(
+            "device_platform=webapp&aid=6383&channel=channel_pc_web", ""
+        )
+        ok = bool(ab and len(ab) > 100)
+        result["steps"]["a_bogus"] = f"ok len={len(ab)}" if ok else f"BAD {ab!r}"
+        result["ok"] = ok
+    except Exception as exc:
+        result["steps"]["error"] = f"{type(exc).__name__}: {exc}"
+        result["traceback"] = traceback.format_exc()
+    try:
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    print("SELFCHECK", json.dumps(result, ensure_ascii=False))
+    raise SystemExit(0 if result["ok"] else 1)
+
+
 def main() -> None:
+    if "--selfcheck" in sys.argv:
+        _run_selfcheck()
+        return
     if _CTK_IMPORT_ERROR is not None:
         sys.stderr.write(
             "customtkinter 未安装，无法启动桌面客户端。\n"
