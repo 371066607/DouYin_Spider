@@ -1840,8 +1840,26 @@ def _run_selfcheck() -> None:
     import json
     import traceback
 
-    result: dict[str, Any] = {"ok": False, "steps": {}}
+    result: dict[str, Any] = {"ok": False, "steps": {}, "diag": {}}
     out = os.path.join(os.path.expanduser("~"), "liangbashuazi_selfcheck.txt")
+
+    # —— 诊断探针：定位 frozen 下 asyncio/subprocess 崩溃的真正原因 ——
+    try:
+        import functools
+        import subprocess
+        result["diag"]["frozen"] = bool(getattr(sys, "frozen", False))
+        result["diag"]["py"] = sys.version
+        result["diag"]["subprocess.Popen.type"] = str(type(subprocess.Popen))
+        result["diag"]["subprocess.Popen.callable"] = callable(subprocess.Popen)
+        result["diag"]["functools.partial.type"] = str(type(functools.partial))
+        try:
+            import asyncio  # noqa: F401
+            result["diag"]["asyncio_import"] = "ok"
+        except Exception:
+            result["diag"]["asyncio_import_err"] = traceback.format_exc()
+    except Exception:
+        result["diag"]["probe_err"] = traceback.format_exc()
+
     try:
         from desktop.bootstrap import build_services
         result["steps"]["import_bootstrap"] = "ok"
