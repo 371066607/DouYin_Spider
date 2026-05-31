@@ -238,7 +238,7 @@ class AgentDesktopApp(ctk.CTk):
         )
         login_btn.grid(row=len(self.NAV_ITEMS) + 3, column=0, sticky="ew", padx=10, pady=(18, 4))
 
-        update_btn = ctk.CTkButton(
+        self._update_btn = ctk.CTkButton(
             nav,
             text="🔄 检查更新",
             anchor="w",
@@ -250,7 +250,7 @@ class AgentDesktopApp(ctk.CTk):
             height=32,
             command=self._check_update,
         )
-        update_btn.grid(row=len(self.NAV_ITEMS) + 4, column=0, sticky="ew", padx=10, pady=(2, 4))
+        self._update_btn.grid(row=len(self.NAV_ITEMS) + 4, column=0, sticky="ew", padx=10, pady=(2, 4))
 
         shell = ctk.CTkFrame(self, fg_color="transparent")
         shell.grid(row=0, column=1, sticky="nsew", padx=22, pady=18)
@@ -1658,16 +1658,34 @@ class AgentDesktopApp(ctk.CTk):
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     def _check_update(self) -> None:
+        if getattr(self, "_update_checking", False):
+            return  # 防抖：检查进行中，不重复触发
+        self._update_checking = True
+        try:
+            self._update_btn.configure(text="🔄 检查中…", state="disabled")
+        except Exception:
+            pass
         self._status_var.set("正在检查更新……")
 
         def worker() -> None:
             try:
                 result = self._do_check_update()
-                self.after(0, lambda r=result: self._show_update_result(r))
+                self.after(0, lambda r=result: self._on_update_checked(r, None))
             except Exception as exc:
-                self.after(0, lambda e=exc: self._show_error("检查更新", e))
+                self.after(0, lambda e=exc: self._on_update_checked(None, e))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_checked(self, result, exc) -> None:
+        self._update_checking = False
+        try:
+            self._update_btn.configure(text="🔄 检查更新", state="normal")
+        except Exception:
+            pass
+        if exc is not None:
+            self._show_error("检查更新", exc)
+            return
+        self._show_update_result(result)
 
     def _do_check_update(self) -> dict:
         import subprocess
